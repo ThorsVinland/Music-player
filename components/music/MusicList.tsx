@@ -96,7 +96,10 @@ export default function MusicList({ onPlay }: { onPlay: (songName: string, uri: 
                             }
                             style={styles.artwork}
                         />
-                        <Text style={styles.songTitle}>
+                        <Text
+                            style={styles.songTitle}
+                            numberOfLines={1}
+                        >
                             {currentSong === item.filename ? "▶ " : ""}{item.filename}
                         </Text>
                     </TouchableOpacity>

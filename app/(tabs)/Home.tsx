@@ -1,19 +1,19 @@
-import { StatusBar, StyleSheet, Text, View } from 'react-native';
-import React, { useState, useEffect, useRef } from 'react';
+import { StatusBar, StyleSheet, View } from 'react-native';
+import React, { useState, useRef } from 'react';
 import StaticGradientBackground from '@/components/ui/StaticGradientBackground';
 import MusicList from '@/components/music/MusicList';
 import MiniPlayer from '@/components/music/MiniPlayer';
 import { Audio } from 'expo-av';
 
 export default function Home() {
-
     const [currentSong, setCurrentSong] = useState<string | null>(null);
     const [currentUri, setCurrentUri] = useState<string | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
+    const [position, setPosition] = useState(0);
+    const [duration, setDuration] = useState(0);
     const soundRef = useRef<Audio.Sound | null>(null);
-    const [artwork, setArtwork] = useState<string | undefined>(undefined);
 
-    const handlePlay = async (songName: string, uri: string, art?: string) => {
+    const handlePlay = async (songName: string, uri: string) => {
         try {
             if (soundRef.current) {
                 await soundRef.current.stopAsync();
@@ -22,54 +22,55 @@ export default function Home() {
 
             const { sound } = await Audio.Sound.createAsync(
                 { uri },
-                { shouldPlay: true }
+                { shouldPlay: true },
+                onPlaybackStatusUpdate
             );
+
             soundRef.current = sound;
             setCurrentSong(songName);
             setCurrentUri(uri);
-            setArtwork(art);
             setIsPlaying(true);
-
         } catch (error) {
             console.log("Error playing:", error);
         }
     };
 
-    const togglePlay = async () => {
+    const onPlaybackStatusUpdate = (status: any) => {
+        if (status.isLoaded) {
+            setPosition(status.positionMillis);
+            setDuration(status.durationMillis || 0);
+            setIsPlaying(status.isPlaying);
+        }
+    };
 
+    const togglePlay = async () => {
         if (!soundRef.current) return;
         const status = await soundRef.current.getStatusAsync();
 
-        if (!status.isLoaded) {
-            console.warn("الصوت غير محمّل بعد");
-            return;
-        }
-        if (status.isPlaying) {
+        if (status.isLoaded && status.isPlaying) {
             await soundRef.current.pauseAsync();
             setIsPlaying(false);
         } else {
             await soundRef.current.playAsync();
             setIsPlaying(true);
         }
-
     };
 
     return (
         <View style={styles.container}>
-            <StatusBar
-                hidden
-            />
+            <StatusBar hidden />
             <StaticGradientBackground />
             <View style={styles.header}></View>
             <MusicList onPlay={handlePlay} />
             <MiniPlayer
                 currentSong={currentSong}
-                artwork={artwork}
                 isPlaying={isPlaying}
                 onTogglePlay={togglePlay}
+                position={position}
+                duration={duration}
             />
         </View>
-    )
+    );
 }
 
 const styles = StyleSheet.create({
@@ -81,4 +82,4 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: 'white',
     },
-})
+});

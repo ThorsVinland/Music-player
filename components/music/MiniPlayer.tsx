@@ -1,57 +1,71 @@
+import React from "react";
 import {
-    StyleSheet,
-    Text,
     View,
+    Text,
+    StyleSheet,
     TouchableOpacity,
-    Image,
-} from 'react-native';
-import React from 'react';
+} from "react-native";
+import Slider from "@react-native-community/slider";
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
 
-type MiniPlayerProps = {
+interface Props {
     currentSong: string | null;
     isPlaying: boolean;
-    artwork?: string;
-    onTogglePlay: () => void;
+    onTogglePlay: () => Promise<void>;
+    position: number;
+    duration: number;
 }
 
-export default function MiniPlayer({ currentSong, isPlaying, artwork, onTogglePlay }: MiniPlayerProps) {
+export default function MiniPlayer({
+    currentSong,
+    isPlaying,
+    onTogglePlay,
+    position,
+    duration,
+}: Props) {
 
-    if (!currentSong) return null;
+    // تحويل المدة إلى صيغة دقيقة:ثانية
+    const formatTime = (millis: number) => {
+        const totalSeconds = Math.floor(millis / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
+    };
 
     return (
-        <LinearGradient
-            colors={["#0aa6b1cc", "#000000dd"]}
-            style={styles.container}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-        >
-            <View style={styles.infoContainer}>
-                <Image
-                    source={
-                        artwork
-                            ? { uri: artwork }
-                            : require("@/assets/images/music.png")
-                    }
-                    style={styles.artwork}
-                />
-                <Text
-                    style={styles.title}
-                    numberOfLines={1}
-                >
-                    {currentSong}
-                </Text>
+        <View style={styles.container}>
+            {/* اسم الأغنية */}
+            <Text style={styles.songTitle} numberOfLines={1}>
+                {currentSong || "لا توجد أغنية مشغلة"}
+            </Text>
+
+            {/* شريط الوقت */}
+            <Slider
+                style={styles.slider}
+                minimumValue={0}
+                maximumValue={duration}
+                value={position}
+                minimumTrackTintColor="#1DB954"
+                maximumTrackTintColor="#555"
+                thumbTintColor="#1DB954"
+            />
+
+            {/* الوقت الحالي والإجمالي */}
+            <View style={styles.timeRow}>
+                <Text style={styles.timeText}>{formatTime(position)}</Text>
+                <Text style={styles.timeText}>{formatTime(duration)}</Text>
             </View>
-            <TouchableOpacity onPress={onTogglePlay}>
+
+            {/* زر التشغيل/الإيقاف */}
+            <TouchableOpacity onPress={onTogglePlay} style={styles.playButton}>
                 <Ionicons
                     name={isPlaying ? "pause" : "play"}
                     size={28}
                     color="white"
                 />
             </TouchableOpacity>
-        </LinearGradient>
-    )
+        </View>
+    );
 }
 
 const styles = StyleSheet.create({
@@ -60,29 +74,33 @@ const styles = StyleSheet.create({
         bottom: 0,
         left: 0,
         right: 0,
-        height: 70,
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
+        backgroundColor: "rgba(0,0,0,0.8)",
+        paddingVertical: 14,
         paddingHorizontal: 16,
         borderTopWidth: 1,
         borderTopColor: "rgba(255,255,255,0.1)",
     },
-    infoContainer: {
-        flexDirection: "row",
-        alignItems: "center",
-        flex: 1,
-        marginRight: 12,
-    },
-    artwork: {
-        width: 50,
-        height: 50,
-        borderRadius: 8,
-    },
-    title: {
+    songTitle: {
         color: "white",
-        marginLeft: 10,
-        fontSize: 14,
-        flexShrink: 1,
+        fontSize: 16,
+        textAlign: "center",
+        marginBottom: 6,
     },
-})
+    slider: {
+        width: "100%",
+        height: 30,
+    },
+    timeRow: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        marginBottom: 10,
+    },
+    timeText: {
+        color: "#ccc",
+        fontSize: 12,
+    },
+    playButton: {
+        alignSelf: "center",
+        marginTop: 4,
+    },
+});
