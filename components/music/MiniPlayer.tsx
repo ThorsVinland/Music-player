@@ -5,26 +5,32 @@ import {
     StyleSheet,
     TouchableOpacity,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Slider from "@react-native-community/slider";
 import { Ionicons } from "@expo/vector-icons";
+import { usePlayerStore } from "@/store/playerStore";
+import { useGlobalAudio } from "@/hooks/useGlobalAudio";
+import { useTheme } from "@/store/themeStore";
+import { Colors, Spacing } from "@/constants/theme";
+import { useRouter } from "expo-router";
 
-interface Props {
-    currentSong: string | null;
-    isPlaying: boolean;
-    onTogglePlay: () => Promise<void>;
-    position: number;
-    duration: number;
-}
+export default function MiniPlayer() {
+    const { currentSong, isPlaying, position, duration, playNext, playPrevious } = usePlayerStore();
+    const { togglePlay, handleSeek } = useGlobalAudio();
+    const { isDark } = useTheme();
+    const currentColors = isDark ? Colors.dark : Colors.light;
+    const router = useRouter();
 
-export default function MiniPlayer({
-    currentSong,
-    isPlaying,
-    onTogglePlay,
-    position,
-    duration,
-}: Props) {
+    const insets = useSafeAreaInsets();
+    const [isSeeking, setIsSeeking] = React.useState(false);
+    const [seekValue, setSeekValue] = React.useState(0);
 
-    // تحويل المدة إلى صيغة دقيقة:ثانية
+    React.useEffect(() => {
+        if (!isSeeking) {
+            setSeekValue(position);
+        }
+    }, [position, isSeeking]);
+
     const formatTime = (millis: number) => {
         const totalSeconds = Math.floor(millis / 1000);
         const minutes = Math.floor(totalSeconds / 60);
@@ -32,75 +38,113 @@ export default function MiniPlayer({
         return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
     };
 
-    return (
-        <View style={styles.container}>
-            {/* اسم الأغنية */}
-            <Text style={styles.songTitle} numberOfLines={1}>
-                {currentSong || "لا توجد أغنية مشغلة"}
-            </Text>
+    if (!currentSong) return null;
 
-            {/* شريط الوقت */}
+    return (
+        <View style={[styles.container, { 
+            paddingBottom: Math.max(insets.bottom, 14),
+            backgroundColor: isDark ? 'rgba(30, 41, 59, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+            borderTopColor: currentColors.glassBorder
+        }]}>
+            <View style={styles.contentRow}>
+                <TouchableOpacity 
+                    style={styles.infoContainer} 
+                    onPress={() => router.push('/player')}
+                    activeOpacity={0.7}
+                >
+                    <Text style={[styles.songTitle, { color: currentColors.text }]} numberOfLines={1}>
+                        {currentSong}
+                    </Text>
+                </TouchableOpacity>
+
+                <View style={styles.controlsRow}>
+                    <TouchableOpacity onPress={playPrevious} style={styles.controlButton}>
+                        <Ionicons name="play-skip-back" size={24} color={currentColors.text} />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity onPress={togglePlay} style={styles.playButton}>
+                        <Ionicons
+                            name={isPlaying ? "pause" : "play"}
+                            size={28}
+                            color={currentColors.primary}
+                        />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity onPress={playNext} style={styles.controlButton}>
+                        <Ionicons name="play-skip-forward" size={24} color={currentColors.text} />
+                    </TouchableOpacity>
+                </View>
+            </View>
+
             <Slider
                 style={styles.slider}
                 minimumValue={0}
                 maximumValue={duration}
-                value={position}
-                minimumTrackTintColor="#1DB954"
-                maximumTrackTintColor="#555"
-                thumbTintColor="#1DB954"
+                value={seekValue}
+                onValueChange={(val) => {
+                    if (!isSeeking) setIsSeeking(true);
+                    setSeekValue(val);
+                }}
+                onSlidingComplete={(val) => {
+                    setIsSeeking(false);
+                    handleSeek(val);
+                }}
+                minimumTrackTintColor={currentColors.primary}
+                maximumTrackTintColor={currentColors.glassBorder}
+                thumbTintColor={currentColors.primary}
             />
 
-            {/* الوقت الحالي والإجمالي */}
             <View style={styles.timeRow}>
-                <Text style={styles.timeText}>{formatTime(position)}</Text>
-                <Text style={styles.timeText}>{formatTime(duration)}</Text>
+                <Text style={[styles.timeText, { color: currentColors.textSecondary }]}>{formatTime(seekValue)}</Text>
+                <Text style={[styles.timeText, { color: currentColors.textSecondary }]}>{formatTime(duration)}</Text>
             </View>
-
-            {/* زر التشغيل/الإيقاف */}
-            <TouchableOpacity onPress={onTogglePlay} style={styles.playButton}>
-                <Ionicons
-                    name={isPlaying ? "pause" : "play"}
-                    size={28}
-                    color="white"
-                />
-            </TouchableOpacity>
         </View>
     );
 }
 
 const styles = StyleSheet.create({
     container: {
-        position: "absolute",
-        bottom: 0,
-        left: 0,
-        right: 0,
-        backgroundColor: "rgba(0,0,0,0.8)",
-        paddingVertical: 14,
-        paddingHorizontal: 16,
         borderTopWidth: 1,
-        borderTopColor: "rgba(255,255,255,0.1)",
+        paddingTop: 10,
+        paddingHorizontal: 16,
+    },
+    contentRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 4,
+    },
+    infoContainer: {
+        flex: 1,
+        marginRight: Spacing.md,
     },
     songTitle: {
-        color: "white",
         fontSize: 16,
-        textAlign: "center",
-        marginBottom: 6,
+        fontWeight: '600',
+    },
+    controlsRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: Spacing.md,
+    },
+    controlButton: {
+        padding: 4,
+    },
+    playButton: {
+        padding: 4,
     },
     slider: {
         width: "100%",
         height: 30,
+        marginTop: -4,
     },
     timeRow: {
         flexDirection: "row",
         justifyContent: "space-between",
-        marginBottom: 10,
+        marginTop: -8,
+        marginBottom: 4,
     },
     timeText: {
-        color: "#ccc",
-        fontSize: 12,
-    },
-    playButton: {
-        alignSelf: "center",
-        marginTop: 4,
+        fontSize: 11,
     },
 });

@@ -1,28 +1,6 @@
-import { View, Text } from 'react-native'
-import React from 'react'
-import Home from './(tabs)/Home'
+import React from 'react';
+import MainPagerView from '@/components/navigation/MainPagerView';
 
-export default function index() {
-  return <Home />
+export default function Index() {
+  return <MainPagerView />;
 }
-// project/
-// │
-// ├── app/
-// │   ├── (tabs)/
-// │   │   ├── Home.tsx          ← الصفحة الرئيسية
-// │   │   ├── Player.tsx        ← شاشة تشغيل الأغنية
-// │   │   └── Settings.tsx
-// │
-// ├── components/
-// │   ├── music/
-// │   │   ├── MusicList.tsx     ← مكوّن عرض قائمة الأغاني (الكود السابق)
-// │   │   ├── MusicItem.tsx     ← عنصر واحد في القائمة (اختياري لاحقًا)
-// │   │
-// │   └── ui/
-// │       └── StaticGradientBackground.tsx
-// │
-// ├── utils/
-// │   └── audioUtils.ts         ← دوال مساعدة (تشغيل، إيقاف، تنسيق الوقت...)
-// │
-// └── assets/
-//     └── icons/                ← أيقونات
