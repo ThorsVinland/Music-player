@@ -1,20 +1,20 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  Image,
   Dimensions,
-  Platform,
+  BackHandler,
 } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withSpring,
+  withTiming,
   interpolate,
   Extrapolation,
   runOnJS,
+  Easing,
 } from 'react-native-reanimated';
 import {
   Gesture,
@@ -26,25 +26,29 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/store/themeStore';
 import { Colors, Spacing, BorderRadius } from '@/constants/theme';
 import { usePlayerStore } from '@/store/playerStore';
+import { useTranslation } from '@/store/languageStore';
 import StaticGradientBackground from '../ui/StaticGradientBackground';
+import { SongCover } from '../music/SongCover';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const MINI_PLAYER_HEIGHT = 68;
-const TAB_BAR_HEIGHT = 56;
+const MINI_PLAYER_MARGIN = 8;
+const TAB_BAR_BASE_HEIGHT = 58;
 
 export default function ExpandablePlayerCard() {
   const { isDark } = useTheme();
   const currentColors = isDark ? Colors.dark : Colors.light;
   const insets = useSafeAreaInsets();
+  const { t } = useTranslation();
 
   const {
     currentSong,
+    currentUri,
     isPlaying,
     position,
     duration,
     playNext,
     playPrevious,
-    currentUri,
     isShuffle,
     repeatMode,
     toggleShuffle,
@@ -64,8 +68,9 @@ export default function ExpandablePlayerCard() {
   const isFav = currentSongItem ? favorites.includes(currentSongItem.id) : false;
 
   // Local seeking state for smooth scrubbing
-  const [isSeeking, setIsSeeking] = React.useState(false);
-  const [seekValue, setSeekValue] = React.useState(0);
+  const [isSeeking, setIsSeeking] = useState(false);
+  const [seekValue, setSeekValue] = useState(0);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
     if (!isSeeking) {
@@ -80,23 +85,68 @@ export default function ExpandablePlayerCard() {
     return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
   };
 
-  // Full expansion height (covers nearly full screen)
-  const fullPlayerHeight = SCREEN_HEIGHT - insets.top - 10;
+  // Full expansion height (covers 100% of the entire screen)
+  const fullPlayerHeight = SCREEN_HEIGHT;
   const maxDrag = fullPlayerHeight - MINI_PLAYER_HEIGHT;
 
   // progress: 0 = collapsed (MiniPlayer), 1 = fully expanded (Full Player)
   const progress = useSharedValue(0);
   const startProgress = useSharedValue(0);
 
-  const expandPlayer = () => {
-    'worklet';
-    progress.value = withSpring(1, { damping: 20, stiffness: 180 });
-  };
+  const updateExpandedState = useCallback((expanded: boolean) => {
+    setIsExpanded(expanded);
+  }, []);
 
-  const collapsePlayer = () => {
+  const expandPlayer = useCallback(() => {
     'worklet';
-    progress.value = withSpring(0, { damping: 20, stiffness: 180 });
-  };
+    progress.value = withTiming(
+      1,
+      {
+        duration: 280,
+        easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+      },
+      (finished) => {
+        if (finished) {
+          runOnJS(updateExpandedState)(true);
+        }
+      }
+    );
+    runOnJS(updateExpandedState)(true);
+  }, [progress, updateExpandedState]);
+
+  const collapsePlayer = useCallback(() => {
+    'worklet';
+    progress.value = withTiming(
+      0,
+      {
+        duration: 280,
+        easing: Easing.bezier(0.25, 0.1, 0.25, 1),
+      },
+      (finished) => {
+        if (finished) {
+          runOnJS(updateExpandedState)(false);
+        }
+      }
+    );
+    runOnJS(updateExpandedState)(false);
+  }, [progress, updateExpandedState]);
+
+  // Android Back Button handling: when player is expanded, collapse it rather than exiting app
+  useEffect(() => {
+    const onBackPress = () => {
+      if (isExpanded || progress.value > 0.05) {
+        collapsePlayer();
+        return true; // Prevent default back action
+      }
+      return false;
+    };
+
+    const subscription = BackHandler.addEventListener(
+      'hardwareBackPress',
+      onBackPress
+    );
+    return () => subscription.remove();
+  }, [isExpanded, progress, collapsePlayer]);
 
   const panGesture = Gesture.Pan()
     .onStart(() => {
@@ -110,13 +160,17 @@ export default function ExpandablePlayerCard() {
       progress.value = newProgress;
     })
     .onEnd((event) => {
-      // If velocity is high or passed threshold, snap open/close
-      if (event.velocityY < -500 || progress.value > 0.45) {
+      // Snap to open or closed with smooth timing, avoiding bounce/oscillation
+      if (event.velocityY < -400 || progress.value > 0.45) {
         expandPlayer();
       } else {
         collapsePlayer();
       }
     });
+
+  // Calculate bottom offset in collapsed state (above bottom navigation bar)
+  const collapsedBottomOffset =
+    TAB_BAR_BASE_HEIGHT + Math.max(insets.bottom, 8) + MINI_PLAYER_MARGIN;
 
   const cardAnimatedStyle = useAnimatedStyle(() => {
     const currentHeight = interpolate(
@@ -129,48 +183,64 @@ export default function ExpandablePlayerCard() {
     const bottomOffset = interpolate(
       progress.value,
       [0, 1],
-      [TAB_BAR_HEIGHT + Math.max(insets.bottom, 8) - 10, 0],
+      [collapsedBottomOffset, 0],
+      Extrapolation.CLAMP
+    );
+
+    const sideMargin = interpolate(
+      progress.value,
+      [0, 1],
+      [10, 0],
       Extrapolation.CLAMP
     );
 
     const borderRadius = interpolate(
       progress.value,
       [0, 1],
-      [14, 28],
+      [16, 0],
+      Extrapolation.CLAMP
+    );
+
+    const borderWidth = interpolate(
+      progress.value,
+      [0, 0.9, 1],
+      [1, 1, 0],
       Extrapolation.CLAMP
     );
 
     return {
       height: currentHeight,
       bottom: bottomOffset,
+      left: sideMargin,
+      right: sideMargin,
       borderRadius: borderRadius,
+      borderWidth: borderWidth,
     };
   });
 
   const miniPlayerOpacityStyle = useAnimatedStyle(() => {
     const opacity = interpolate(
       progress.value,
-      [0, 0.2],
+      [0, 0.15],
       [1, 0],
       Extrapolation.CLAMP
     );
-    const pointerEvents = progress.value > 0.3 ? 'none' : 'auto';
     return {
       opacity,
-      display: opacity === 0 ? 'none' : 'flex',
+      display: opacity <= 0.01 ? 'none' : 'flex',
     };
   });
 
   const fullPlayerOpacityStyle = useAnimatedStyle(() => {
     const opacity = interpolate(
       progress.value,
-      [0.25, 1],
+      [0.2, 1],
       [0, 1],
       Extrapolation.CLAMP
     );
     return {
       opacity,
-      display: opacity === 0 ? 'none' : 'flex',
+      display: opacity <= 0.01 ? 'none' : 'flex',
     };
   });
 
@@ -183,11 +253,11 @@ export default function ExpandablePlayerCard() {
           styles.container,
           cardAnimatedStyle,
           {
-            backgroundColor: isDark ? '#1e293b' : '#ffffff',
-            borderColor: isDark ? '#334155' : '#e2e8f0',
+            backgroundColor: isDark ? '#161f30' : '#ffffff',
+            borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.08)',
             shadowColor: '#000',
             shadowOffset: { width: 0, height: -4 },
-            shadowOpacity: isDark ? 0.4 : 0.15,
+            shadowOpacity: isDark ? 0.35 : 0.12,
             shadowRadius: 10,
             elevation: 16,
           },
@@ -211,14 +281,10 @@ export default function ExpandablePlayerCard() {
           <TouchableOpacity
             style={styles.miniInfoContainer}
             onPress={expandPlayer}
-            activeOpacity={0.8}
+            activeOpacity={0.85}
           >
-            <Image
-              source={
-                currentUri?.endsWith('.mp3')
-                  ? require('@/assets/images/music.png')
-                  : { uri: currentUri || undefined }
-              }
+            <SongCover
+              uri={currentUri}
               style={styles.miniArtwork}
             />
 
@@ -236,7 +302,7 @@ export default function ExpandablePlayerCard() {
                 ]}
                 numberOfLines={1}
               >
-                Now Playing • Tap to Expand
+                {t.tapToExpand}
               </Text>
             </View>
           </TouchableOpacity>
@@ -245,10 +311,11 @@ export default function ExpandablePlayerCard() {
             <TouchableOpacity
               onPress={playPrevious}
               style={styles.miniControlBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               <Ionicons
                 name="play-skip-back"
-                size={22}
+                size={20}
                 color={currentColors.text}
               />
             </TouchableOpacity>
@@ -259,19 +326,24 @@ export default function ExpandablePlayerCard() {
                 styles.miniPlayBtn,
                 { backgroundColor: currentColors.primary },
               ]}
+              activeOpacity={0.8}
             >
               <Ionicons
                 name={isPlaying ? 'pause' : 'play'}
-                size={22}
+                size={20}
                 color="#fff"
                 style={{ marginLeft: isPlaying ? 0 : 2 }}
               />
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={playNext} style={styles.miniControlBtn}>
+            <TouchableOpacity
+              onPress={playNext}
+              style={styles.miniControlBtn}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
               <Ionicons
                 name="play-skip-forward"
-                size={22}
+                size={20}
                 color={currentColors.text}
               />
             </TouchableOpacity>
@@ -279,14 +351,23 @@ export default function ExpandablePlayerCard() {
         </Animated.View>
 
         {/* ============================================================ */}
-        {/* FULL PLAYER CARD VIEW (EXPANDED STATE)                       */}
+        {/* FULL PLAYER CARD VIEW (EXPANDED 100% FULL SCREEN STATE)      */}
         {/* ============================================================ */}
         <Animated.View style={[styles.fullPlayerContent, fullPlayerOpacityStyle]}>
           <StaticGradientBackground />
 
-          {/* Top handle & header */}
-          <View style={styles.fullHeader}>
-            <TouchableOpacity onPress={collapsePlayer} style={styles.fullIconBtn}>
+          {/* Top handle & header with insets.top padding */}
+          <View
+            style={[
+              styles.fullHeader,
+              { paddingTop: insets.top + Spacing.sm },
+            ]}
+          >
+            <TouchableOpacity
+              onPress={collapsePlayer}
+              style={styles.fullIconBtn}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            >
               <Ionicons
                 name="chevron-down"
                 size={28}
@@ -307,7 +388,7 @@ export default function ExpandablePlayerCard() {
                   { color: currentColors.textSecondary },
                 ]}
               >
-                NOW PLAYING
+                {t.nowPlaying}
               </Text>
             </View>
 
@@ -315,6 +396,7 @@ export default function ExpandablePlayerCard() {
               <TouchableOpacity
                 onPress={() => toggleFavorite(currentSongItem.id)}
                 style={styles.fullIconBtn}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
               >
                 <Ionicons
                   name={isFav ? 'heart' : 'heart-outline'}
@@ -323,21 +405,21 @@ export default function ExpandablePlayerCard() {
                 />
               </TouchableOpacity>
             ) : (
-              <View style={{ width: 40 }} />
+              <View style={{ width: 44 }} />
             )}
           </View>
 
           {/* Big Album Artwork */}
           <View style={styles.fullArtworkContainer}>
-            <Image
-              source={
-                currentUri?.endsWith('.mp3')
-                  ? require('@/assets/images/music.png')
-                  : { uri: currentUri || undefined }
-              }
+            <SongCover
+              uri={currentUri}
               style={[
                 styles.fullArtwork,
-                { borderColor: currentColors.glassBorder },
+                {
+                  borderColor: isDark
+                    ? 'rgba(255, 255, 255, 0.12)'
+                    : 'rgba(0, 0, 0, 0.08)',
+                },
               ]}
             />
           </View>
@@ -354,7 +436,7 @@ export default function ExpandablePlayerCard() {
               style={[styles.fullArtistName, { color: currentColors.primary }]}
               numberOfLines={1}
             >
-              Audio File • Music Player
+              {t.audioFile} • {t.musicPlayer}
             </Text>
           </View>
 
@@ -374,7 +456,9 @@ export default function ExpandablePlayerCard() {
                 seekTo(val);
               }}
               minimumTrackTintColor={currentColors.primary}
-              maximumTrackTintColor={currentColors.glassBorder}
+              maximumTrackTintColor={
+                isDark ? 'rgba(255, 255, 255, 0.18)' : 'rgba(0, 0, 0, 0.12)'
+              }
               thumbTintColor={currentColors.primary}
             />
             <View style={styles.fullTimeRow}>
@@ -401,12 +485,13 @@ export default function ExpandablePlayerCard() {
           <View
             style={[
               styles.fullControlsContainer,
-              { paddingBottom: insets.bottom + Spacing.lg },
+              { paddingBottom: Math.max(insets.bottom, 16) + Spacing.lg },
             ]}
           >
             <TouchableOpacity
               onPress={toggleShuffle}
               style={styles.fullControlBtn}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <Ionicons
                 name="shuffle"
@@ -422,6 +507,7 @@ export default function ExpandablePlayerCard() {
             <TouchableOpacity
               onPress={playPrevious}
               style={styles.fullMainControlBtn}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <Ionicons
                 name="play-skip-back"
@@ -436,6 +522,7 @@ export default function ExpandablePlayerCard() {
                 styles.fullPlayBtn,
                 { backgroundColor: currentColors.primary },
               ]}
+              activeOpacity={0.85}
             >
               <Ionicons
                 name={isPlaying ? 'pause' : 'play'}
@@ -448,6 +535,7 @@ export default function ExpandablePlayerCard() {
             <TouchableOpacity
               onPress={playNext}
               style={styles.fullMainControlBtn}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <Ionicons
                 name="play-skip-forward"
@@ -459,6 +547,7 @@ export default function ExpandablePlayerCard() {
             <TouchableOpacity
               onPress={toggleRepeat}
               style={styles.fullControlBtn}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <Ionicons
                 name={repeatMode === 'one' ? 'repeat-outline' : 'repeat'}
@@ -473,7 +562,7 @@ export default function ExpandablePlayerCard() {
                 <Text
                   style={{
                     position: 'absolute',
-                    top: 10,
+                    top: 8,
                     right: 4,
                     fontSize: 9,
                     fontWeight: 'bold',
@@ -494,9 +583,6 @@ export default function ExpandablePlayerCard() {
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    left: 8,
-    right: 8,
-    borderWidth: 1,
     overflow: 'hidden',
     zIndex: 999,
   },
@@ -526,7 +612,7 @@ const styles = StyleSheet.create({
   },
   miniTextWrapper: {
     flex: 1,
-    marginLeft: Spacing.sm + 2,
+    marginLeft: Spacing.sm + 4,
   },
   miniSongTitle: {
     fontSize: 14,
@@ -539,15 +625,15 @@ const styles = StyleSheet.create({
   miniControlsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
   },
   miniControlBtn: {
     padding: 6,
   },
   miniPlayBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -562,7 +648,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: Spacing.md,
-    paddingTop: Spacing.sm,
   },
   handleIndicator: {
     alignItems: 'center',
@@ -592,6 +677,7 @@ const styles = StyleSheet.create({
   fullArtwork: {
     width: '88%',
     aspectRatio: 1,
+    maxHeight: 320,
     borderRadius: BorderRadius.xl,
     borderWidth: 1,
   },
@@ -604,10 +690,10 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: 'bold',
     textAlign: 'center',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   fullArtistName: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
   },
   fullProgressContainer: {
@@ -640,9 +726,9 @@ const styles = StyleSheet.create({
     padding: Spacing.sm,
   },
   fullPlayBtn: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',

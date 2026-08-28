@@ -39,6 +39,14 @@
             "backgroundColor": "#000000"
           }
         }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": false,
+          "videoPermission": false,
+          "audioPermission": "Allow $(PRODUCT_NAME) to access your audio files to play music."
+        }
       ]
     ],
     "experiments": {

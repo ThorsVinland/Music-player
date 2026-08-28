@@ -1,5 +1,14 @@
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
 import React, { useState } from 'react';
+import {
+  StyleSheet,
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator,
+  TouchableWithoutFeedback,
+  Keyboard,
+} from 'react-native';
 import StaticGradientBackground from '@/components/ui/StaticGradientBackground';
 import MusicList from '@/components/music/MusicList';
 import { useTheme } from '@/store/themeStore';
@@ -7,6 +16,7 @@ import { Colors, Spacing, BorderRadius } from '@/constants/theme';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLibraryStore } from '@/store/libraryStore';
+import { useTranslation } from '@/store/languageStore';
 
 export default function Home() {
   const { isDark } = useTheme();
@@ -14,84 +24,112 @@ export default function Home() {
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
   const { isScanning, scanLibrary } = useLibraryStore();
+  const { language, t, isRTL } = useTranslation();
 
   return (
-    <View style={styles.container}>
-      <StaticGradientBackground />
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      <View style={styles.container}>
+        <StaticGradientBackground />
 
-      <View style={[styles.header, { paddingTop: insets.top + Spacing.sm }]}>
-        <View style={styles.headerTopRow}>
-          <View>
-            <Text style={[styles.headerTitle, { color: currentColors.text }]}>
-              Music Library
-            </Text>
-            <Text style={[styles.headerSubtitle, { color: currentColors.textSecondary }]}>
-              All Songs
-            </Text>
+        <View style={[styles.header, { paddingTop: insets.top + Spacing.sm }]}>
+          <View style={styles.headerTopRow}>
+            <View>
+              <Text style={[styles.headerTitle, { color: currentColors.text }]}>
+                {t.musicLibrary}
+              </Text>
+              <Text
+                style={[
+                  styles.headerSubtitle,
+                  { color: currentColors.textSecondary },
+                ]}
+              >
+                {t.allSongs}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={[
+                styles.scanButton,
+                {
+                  backgroundColor: currentColors.glassBackground,
+                  borderColor: currentColors.glassBorder,
+                },
+              ]}
+              onPress={scanLibrary}
+              disabled={isScanning}
+              activeOpacity={0.7}
+            >
+              {isScanning ? (
+                <ActivityIndicator size="small" color={currentColors.primary} />
+              ) : (
+                <>
+                  <Ionicons
+                    name="refresh"
+                    size={16}
+                    color={currentColors.primary}
+                  />
+                  <Text
+                    style={[
+                      styles.scanButtonText,
+                      { color: currentColors.primary },
+                    ]}
+                  >
+                    {t.scan}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
           </View>
 
-          <TouchableOpacity
+          <View
             style={[
-              styles.scanButton,
+              styles.searchContainer,
               {
                 backgroundColor: currentColors.glassBackground,
                 borderColor: currentColors.glassBorder,
               },
             ]}
-            onPress={scanLibrary}
-            disabled={isScanning}
-            activeOpacity={0.7}
           >
-            {isScanning ? (
-              <ActivityIndicator size="small" color={currentColors.primary} />
-            ) : (
-              <>
-                <Ionicons name="refresh" size={16} color={currentColors.primary} />
-                <Text style={[styles.scanButtonText, { color: currentColors.primary }]}>
-                  Scan
-                </Text>
-              </>
+            <Ionicons
+              name="search"
+              size={18}
+              color={currentColors.textSecondary}
+              style={styles.searchIcon}
+            />
+            <TextInput
+              key={`search-input-${language}`}
+              style={[
+                styles.searchInput,
+                {
+                  color: currentColors.text,
+                  textAlign: isRTL ? 'right' : 'left',
+                },
+              ]}
+              placeholder={t.searchPlaceholder}
+              placeholderTextColor={currentColors.textSecondary}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              clearButtonMode="while-editing"
+              returnKeyType="search"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity
+                onPress={() => setSearchQuery('')}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons
+                  name="close-circle"
+                  size={18}
+                  color={currentColors.textSecondary}
+                />
+              </TouchableOpacity>
             )}
-          </TouchableOpacity>
+          </View>
         </View>
 
-        <View
-          style={[
-            styles.searchContainer,
-            {
-              backgroundColor: currentColors.glassBackground,
-              borderColor: currentColors.glassBorder,
-            },
-          ]}
-        >
-          <Ionicons
-            name="search"
-            size={18}
-            color={currentColors.textSecondary}
-            style={styles.searchIcon}
-          />
-          <TextInput
-            style={[styles.searchInput, { color: currentColors.text }]}
-            placeholder="Search songs, titles, files..."
-            placeholderTextColor={currentColors.textSecondary}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            clearButtonMode="while-editing"
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Ionicons
-                name="close-circle"
-                size={18}
-                color={currentColors.textSecondary}
-              />
-            </TouchableOpacity>
-          )}
-        </View>
+        <MusicList searchQuery={searchQuery} />
       </View>
-
-      <MusicList searchQuery={searchQuery} />
-    </View>
+    </TouchableWithoutFeedback>
   );
 }
 
@@ -101,13 +139,13 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: Spacing.md,
-    paddingBottom: Spacing.sm,
+    paddingBottom: Spacing.xs,
   },
   headerTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.sm + 4,
   },
   headerTitle: {
     fontSize: 28,
@@ -144,6 +182,6 @@ const styles = StyleSheet.create({
   },
   searchInput: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 14.5,
   },
 });

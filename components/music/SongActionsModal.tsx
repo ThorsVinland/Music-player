@@ -15,6 +15,7 @@ import { Colors, Spacing, BorderRadius } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { useLibraryStore } from '@/store/libraryStore';
 import { usePlaylistStore } from '@/store/playlistStore';
+import { useTranslation } from '@/store/languageStore';
 
 interface Props {
   visible: boolean;
@@ -27,6 +28,7 @@ export default function SongActionsModal({ visible, song, onClose }: Props) {
   const currentColors = isDark ? Colors.dark : Colors.light;
   const deleteSongFromLibrary = useLibraryStore((state) => state.deleteSongFromLibrary);
   const { playlists, addSongToPlaylist } = usePlaylistStore();
+  const { t, isRTL } = useTranslation();
 
   const [infoVisible, setInfoVisible] = useState(false);
   const [playlistPickerVisible, setPlaylistPickerVisible] = useState(false);
@@ -55,12 +57,12 @@ export default function SongActionsModal({ visible, song, onClose }: Props) {
   const handleDelete = () => {
     onClose();
     Alert.alert(
-      'Remove from Library',
-      `Are you sure you want to remove "${song.filename}" from your music library?`,
+      t.deleteConfirmTitle,
+      t.deleteConfirmMsg,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t.cancel, style: 'cancel' },
         {
-          text: 'Remove',
+          text: t.delete,
           style: 'destructive',
           onPress: () => deleteSongFromLibrary(song.id),
         },
@@ -72,7 +74,7 @@ export default function SongActionsModal({ visible, song, onClose }: Props) {
     addSongToPlaylist(playlistId, song.id);
     setPlaylistPickerVisible(false);
     onClose();
-    Alert.alert('Added to Playlist', `Added "${song.filename}" to ${playlistName}`);
+    Alert.alert(t.addedToPlaylistTitle, `${t.addedToPlaylistMsg} "${playlistName}"`);
   };
 
   return (
@@ -92,7 +94,7 @@ export default function SongActionsModal({ visible, song, onClose }: Props) {
             style={[
               styles.sheetContainer,
               {
-                backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                backgroundColor: isDark ? '#161f30' : '#ffffff',
                 borderColor: currentColors.border,
               },
             ]}
@@ -122,7 +124,7 @@ export default function SongActionsModal({ visible, song, onClose }: Props) {
                 color={currentColors.primary}
               />
               <Text style={[styles.actionText, { color: currentColors.text }]}>
-                Add to Playlist
+                {t.addToPlaylist}
               </Text>
             </TouchableOpacity>
 
@@ -136,7 +138,7 @@ export default function SongActionsModal({ visible, song, onClose }: Props) {
                 color={currentColors.primary}
               />
               <Text style={[styles.actionText, { color: currentColors.text }]}>
-                Song Info
+                {t.songInfo}
               </Text>
             </TouchableOpacity>
 
@@ -147,7 +149,7 @@ export default function SongActionsModal({ visible, song, onClose }: Props) {
                 color={currentColors.primary}
               />
               <Text style={[styles.actionText, { color: currentColors.text }]}>
-                Share
+                {t.share}
               </Text>
             </TouchableOpacity>
 
@@ -157,7 +159,7 @@ export default function SongActionsModal({ visible, song, onClose }: Props) {
             >
               <Ionicons name="trash-outline" size={24} color="#ef4444" />
               <Text style={[styles.actionText, { color: '#ef4444' }]}>
-                Remove from Library
+                {t.removeFromLibrary}
               </Text>
             </TouchableOpacity>
           </View>
@@ -171,19 +173,19 @@ export default function SongActionsModal({ visible, song, onClose }: Props) {
         animationType="fade"
         onRequestClose={() => setPlaylistPickerVisible(false)}
       >
-        <View style={styles.backdrop}>
+        <View style={styles.backdropCenter}>
           <View
             style={[
               styles.infoCard,
               {
-                backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                backgroundColor: isDark ? '#161f30' : '#ffffff',
                 borderColor: currentColors.border,
                 maxHeight: '60%',
               },
             ]}
           >
             <Text style={[styles.infoTitle, { color: currentColors.text }]}>
-              Select Playlist
+              {t.selectPlaylist}
             </Text>
 
             <FlatList
@@ -200,7 +202,13 @@ export default function SongActionsModal({ visible, song, onClose }: Props) {
                     color={currentColors.primary}
                   />
                   <Text
-                    style={[styles.playlistOptionText, { color: currentColors.text }]}
+                    style={[
+                      styles.playlistOptionText,
+                      {
+                        color: currentColors.text,
+                        textAlign: isRTL ? 'right' : 'left',
+                      },
+                    ]}
                   >
                     {item.name}
                   </Text>
@@ -215,7 +223,7 @@ export default function SongActionsModal({ visible, song, onClose }: Props) {
               ]}
               onPress={() => setPlaylistPickerVisible(false)}
             >
-              <Text style={styles.closeButtonText}>Cancel</Text>
+              <Text style={styles.closeButtonText}>{t.cancel}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -228,23 +236,23 @@ export default function SongActionsModal({ visible, song, onClose }: Props) {
         animationType="fade"
         onRequestClose={() => setInfoVisible(false)}
       >
-        <View style={styles.backdrop}>
+        <View style={styles.backdropCenter}>
           <View
             style={[
               styles.infoCard,
               {
-                backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                backgroundColor: isDark ? '#161f30' : '#ffffff',
                 borderColor: currentColors.border,
               },
             ]}
           >
             <Text style={[styles.infoTitle, { color: currentColors.text }]}>
-              Song Metadata
+              {t.songMetadata}
             </Text>
 
             <View style={styles.metaRow}>
               <Text style={[styles.metaLabel, { color: currentColors.textSecondary }]}>
-                Title:
+                {t.titleLabel}
               </Text>
               <Text
                 style={[styles.metaValue, { color: currentColors.text }]}
@@ -256,7 +264,7 @@ export default function SongActionsModal({ visible, song, onClose }: Props) {
 
             <View style={styles.metaRow}>
               <Text style={[styles.metaLabel, { color: currentColors.textSecondary }]}>
-                Duration:
+                {t.durationLabel}
               </Text>
               <Text style={[styles.metaValue, { color: currentColors.text }]}>
                 {formatDuration(song.duration)}
@@ -265,7 +273,7 @@ export default function SongActionsModal({ visible, song, onClose }: Props) {
 
             <View style={styles.metaRow}>
               <Text style={[styles.metaLabel, { color: currentColors.textSecondary }]}>
-                File Path:
+                {t.locationLabel}
               </Text>
               <Text
                 style={[styles.metaValue, { color: currentColors.text }]}
@@ -282,7 +290,7 @@ export default function SongActionsModal({ visible, song, onClose }: Props) {
               ]}
               onPress={() => setInfoVisible(false)}
             >
-              <Text style={styles.closeButtonText}>Done</Text>
+              <Text style={styles.closeButtonText}>{t.close}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -296,6 +304,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.55)',
     justifyContent: 'flex-end',
+  },
+  backdropCenter: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.md,
   },
   sheetContainer: {
     borderTopLeftRadius: BorderRadius.xl,
@@ -333,17 +348,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0,
   },
   actionText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '500',
-    marginLeft: Spacing.md,
+    marginHorizontal: Spacing.md,
   },
   infoCard: {
-    marginHorizontal: Spacing.lg,
+    width: '100%',
     borderRadius: BorderRadius.xl,
     padding: Spacing.lg,
     borderWidth: 1,
-    marginBottom: 'auto',
-    marginTop: 'auto',
   },
   infoTitle: {
     fontSize: 18,
@@ -366,13 +379,13 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     marginTop: Spacing.lg,
-    paddingVertical: Spacing.sm,
+    paddingVertical: Spacing.sm + 2,
     borderRadius: BorderRadius.md,
     alignItems: 'center',
   },
   closeButtonText: {
     color: '#fff',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
   },
   playlistOption: {
@@ -383,8 +396,8 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(150,150,150,0.15)',
   },
   playlistOptionText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '500',
-    marginLeft: Spacing.md,
+    marginHorizontal: Spacing.md,
   },
 });

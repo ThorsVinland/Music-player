@@ -49,7 +49,7 @@ export const usePlayerStore = create<PlayerState>()(
 
       setCurrentSong: (song) => set({ currentSong: song }),
       setCurrentUri: (uri) => {
-        set({ currentUri: uri });
+        set({ currentUri: uri, isPlaying: true });
         if (uri) {
           audioService.playUri(uri);
         }
@@ -61,11 +61,12 @@ export const usePlayerStore = create<PlayerState>()(
       
       playSong: (song: MediaLibrary.Asset) => {
         const { playlist } = get();
-        const index = playlist.findIndex(s => s.id === song.id);
+        const index = playlist.findIndex((s) => s.id === song.id);
         set({ 
           currentIndex: index !== -1 ? index : 0, 
           currentSong: song.filename, 
           currentUri: song.uri,
+          isPlaying: true,
           position: 0,
         });
         audioService.playUri(song.uri);
@@ -79,6 +80,7 @@ export const usePlayerStore = create<PlayerState>()(
             currentIndex: index, 
             currentSong: song.filename, 
             currentUri: song.uri,
+            isPlaying: true,
             position: 0,
           });
           audioService.playUri(song.uri);
@@ -119,7 +121,7 @@ export const usePlayerStore = create<PlayerState>()(
       toggleFavorite: (id) => {
         const { favorites } = get();
         if (favorites.includes(id)) {
-          set({ favorites: favorites.filter(favId => favId !== id) });
+          set({ favorites: favorites.filter((favId) => favId !== id) });
         } else {
           set({ favorites: [...favorites, id] });
         }

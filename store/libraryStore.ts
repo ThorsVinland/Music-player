@@ -3,10 +3,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as MediaLibrary from 'expo-media-library';
 import { usePlayerStore } from './playerStore';
 
-const CACHE_KEY = '@music_player_songs_cache_v1';
+const CACHE_KEY = '@music_player_songs_cache_v3';
+
+export type Song = MediaLibrary.Asset & { formattedDuration?: string };
 
 interface LibraryState {
-  songs: MediaLibrary.Asset[];
+  songs: Song[];
   loading: boolean;
   isScanning: boolean;
   hasLoadedCache: boolean;
@@ -23,21 +25,19 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
 
   loadSongs: async () => {
     try {
-      // 1. Try reading from cache first for instant startup
       const cached = await AsyncStorage.getItem(CACHE_KEY);
       if (cached) {
         const parsedSongs: MediaLibrary.Asset[] = JSON.parse(cached);
-        if (parsedSongs && parsedSongs.length > 0) {
-          set({ songs: parsedSongs, loading: false, hasLoadedCache: true });
-          usePlayerStore.getState().setPlaylist(parsedSongs);
-          return;
-        }
+        // Even if the cache is empty, we respect it. Only scan if cache is completely missing.
+        set({ songs: parsedSongs, loading: false, hasLoadedCache: true });
+        usePlayerStore.getState().setPlaylist(parsedSongs);
+        return;
       }
     } catch (e) {
       console.log('Error loading cached songs:', e);
     }
 
-    // 2. If no cache exists, perform initial scan
+    // Only on absolute first launch (cache missing) do we auto-scan
     await get().scanLibrary();
   },
 
@@ -67,9 +67,14 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         after = media.endCursor;
       }
 
-      const sorted = allSongs.sort((a, b) =>
+      const sorted: Song[] = allSongs.sort((a, b) =>
         a.filename.localeCompare(b.filename, undefined, { sensitivity: 'base' })
-      );
+      ).map(song => {
+        const mins = Math.floor(song.duration / 60);
+        const secs = Math.floor(song.duration % 60);
+        const formattedDuration = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+        return { ...song, formattedDuration };
+      });
 
       // Save to local storage cache
       await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(sorted));

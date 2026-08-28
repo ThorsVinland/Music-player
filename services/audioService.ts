@@ -1,3 +1,4 @@
+import { Alert } from 'react-native';
 import { Audio, InterruptionModeAndroid, InterruptionModeIOS } from 'expo-av';
 import { usePlayerStore } from '@/store/playerStore';
 
@@ -6,6 +7,7 @@ class AudioService {
   private currentUri: string | null = null;
   private isInitialized = false;
   private isSeeking = false;
+  private isLoading = false;
 
   async init() {
     if (this.isInitialized) return;
@@ -35,6 +37,8 @@ class AudioService {
       setPosition(status.positionMillis || 0);
     }
     setDuration(status.durationMillis || 0);
+
+    // Sync actual playing state from engine
     setIsPlaying(status.isPlaying);
 
     if (status.didJustFinish) {
@@ -54,56 +58,85 @@ class AudioService {
     }
   };
 
+  private playId = 0;
+
   async playUri(uri: string) {
+    if (this.isLoading && this.currentUri === uri) return;
+    
+    const currentPlayId = ++this.playId;
+    this.currentUri = uri;
+    this.isLoading = true;
+    
     await this.init();
 
     try {
       if (this.sound) {
+        const oldSound = this.sound;
+        this.sound = null;
         try {
-          await this.sound.stopAsync();
-          await this.sound.unloadAsync();
+          await oldSound.stopAsync();
+          await oldSound.unloadAsync();
         } catch (e) {
           // ignore cleanup error
         }
-        this.sound = null;
       }
 
-      this.currentUri = uri;
+      // If another song was requested while we were cleaning up, abort this one
+      if (this.playId !== currentPlayId) {
+        return;
+      }
+
       const { sound } = await Audio.Sound.createAsync(
         { uri },
-        { shouldPlay: true, progressUpdateIntervalMillis: 250 },
+        { shouldPlay: true, progressUpdateIntervalMillis: 350 },
         this.onPlaybackStatusUpdate
       );
 
+      // Final check before assigning the sound
+      if (this.playId !== currentPlayId) {
+        sound.unloadAsync();
+        return;
+      }
+
       this.sound = sound;
       usePlayerStore.getState().setIsPlaying(true);
-    } catch (error) {
-      console.log('Error playing audio URI:', error);
+    } catch (error: any) {
+      if (this.playId === currentPlayId) {
+        console.log('Error playing audio URI:', error);
+        Alert.alert('Playback Error', `Failed to play audio: ${error.message || 'Unknown error'}`);
+        usePlayerStore.getState().setIsPlaying(false);
+      }
+    } finally {
+      if (this.playId === currentPlayId) {
+        this.isLoading = false;
+      }
     }
   }
 
   async togglePlay() {
+    const { isPlaying, currentUri, setIsPlaying } = usePlayerStore.getState();
+
     if (!this.sound) {
-      const { currentUri } = usePlayerStore.getState();
       if (currentUri) {
         await this.playUri(currentUri);
       }
       return;
     }
 
+    // 0ms Optimistic UI update: immediate feedback
+    const nextState = !isPlaying;
+    setIsPlaying(nextState);
+
     try {
-      const status = await this.sound.getStatusAsync();
-      if (status.isLoaded) {
-        if (status.isPlaying) {
-          await this.sound.pauseAsync();
-          usePlayerStore.getState().setIsPlaying(false);
-        } else {
-          await this.sound.playAsync();
-          usePlayerStore.getState().setIsPlaying(true);
-        }
+      if (nextState) {
+        await this.sound.playAsync();
+      } else {
+        await this.sound.pauseAsync();
       }
     } catch (e) {
       console.log('togglePlay error:', e);
+      // Revert if native failed
+      setIsPlaying(isPlaying);
     }
   }
 
@@ -120,7 +153,6 @@ class AudioService {
     } catch (e) {
       console.log('seekTo error:', e);
     } finally {
-      // Small timeout to let Expo AV catch up before accepting position status updates again
       setTimeout(() => {
         this.isSeeking = false;
       }, 300);
