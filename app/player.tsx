@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, PanResponder, Animated, Dimensions, PixelRatio } from 'react-native';
 import { useTheme } from '@/store/themeStore';
 import { Colors, Spacing, BorderRadius } from '@/constants/theme';
 import { usePlayerStore } from '@/store/playerStore';
@@ -10,16 +10,24 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import StaticGradientBackground from '@/components/ui/StaticGradientBackground';
 
+const SCREEN_HEIGHT = Dimensions.get('window').height;
+
+// ~2cm threshold, density-aware
+// لا تضرب بـ PixelRatio.get() لأن dp مستقلة عن الكثافة أصلاً
+const BASE_DPI = 160;
+const CM_TO_INCH = 0.393701;
+const DISMISS_THRESHOLD = 1 * CM_TO_INCH * BASE_DPI; // ≈ 63 dp للـ 1cm
+
 export default function PlayerScreen() {
     const { isDark } = useTheme();
     const currentColors = isDark ? Colors.dark : Colors.light;
-    const { 
-        currentSong, 
-        isPlaying, 
-        position, 
-        duration, 
-        playNext, 
-        playPrevious, 
+    const {
+        currentSong,
+        isPlaying,
+        position,
+        duration,
+        playNext,
+        playPrevious,
         currentUri,
         isShuffle,
         repeatMode,
@@ -33,10 +41,10 @@ export default function PlayerScreen() {
     const { togglePlay, handleSeek } = useGlobalAudio();
     const router = useRouter();
     const insets = useSafeAreaInsets();
-    
+
     const currentSongItem = currentIndex >= 0 && currentIndex < playlist.length ? playlist[currentIndex] : null;
     const isFav = currentSongItem ? favorites.includes(currentSongItem.id) : false;
-    
+
     const [isSeeking, setIsSeeking] = React.useState(false);
     const [seekValue, setSeekValue] = React.useState(0);
 
@@ -53,24 +61,83 @@ export default function PlayerScreen() {
         return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
     };
 
+    // --- Animation setup ---
+    const translateY = React.useRef(new Animated.Value(0)).current;
+    const isClosingRef = React.useRef(false);
+
+    const closeWithAnimation = React.useCallback((fromValue: number = 0) => {
+        if (isClosingRef.current) return;
+        isClosingRef.current = true;
+        Animated.timing(translateY, {
+            toValue: SCREEN_HEIGHT,
+            duration: 220,
+            useNativeDriver: true,
+        }).start(() => {
+            router.back();
+        });
+    }, [translateY, router]);
+
+    const springBack = React.useCallback(() => {
+        Animated.spring(translateY, {
+            toValue: 0,
+            useNativeDriver: true,
+            speed: 16,
+            bounciness: 6,
+        }).start();
+    }, [translateY]);
+
+    const panResponder = React.useRef(
+        PanResponder.create({
+            onMoveShouldSetPanResponderCapture: (_, gestureState) => {
+                return gestureState.dy > 15 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
+            },
+            onPanResponderMove: (_, gestureState) => {
+                // Follow the finger 1:1, don't allow dragging upward past 0
+                const dy = Math.max(0, gestureState.dy);
+                translateY.setValue(dy);
+            },
+            onPanResponderRelease: (_, gestureState) => {
+                const dy = Math.max(0, gestureState.dy);
+                if (dy > DISMISS_THRESHOLD || gestureState.vy > 0.5) {
+                    closeWithAnimation();
+                } else {
+                    springBack();
+                }
+            },
+            onPanResponderTerminate: () => {
+                springBack();
+            },
+        })
+    ).current;
+
+    const handleClosePress = () => {
+        closeWithAnimation();
+    };
+
     return (
-        <View style={styles.container}>
+        <Animated.View
+            style={[
+                styles.container,
+                { transform: [{ translateY }] },
+            ]}
+            {...panResponder.panHandlers}
+        >
             <StaticGradientBackground />
-            
+
             <View style={[styles.header, { paddingTop: insets.top + Spacing.sm }]}>
-                <TouchableOpacity onPress={() => router.back()} style={styles.iconButton}>
+                <TouchableOpacity onPress={handleClosePress} style={styles.iconButton}>
                     <Ionicons name="chevron-down" size={32} color={currentColors.text} />
                 </TouchableOpacity>
                 <Text style={[styles.headerTitle, { color: currentColors.textSecondary }]}>Now Playing</Text>
                 {currentSongItem ? (
-                    <TouchableOpacity 
-                        onPress={() => toggleFavorite(currentSongItem.id)} 
+                    <TouchableOpacity
+                        onPress={() => toggleFavorite(currentSongItem.id)}
                         style={styles.iconButton}
                     >
-                        <Ionicons 
-                            name={isFav ? "heart" : "heart-outline"} 
-                            size={26} 
-                            color={isFav ? currentColors.primary : currentColors.text} 
+                        <Ionicons
+                            name={isFav ? "heart" : "heart-outline"}
+                            size={26}
+                            color={isFav ? currentColors.primary : currentColors.text}
                         />
                     </TouchableOpacity>
                 ) : (
@@ -124,10 +191,10 @@ export default function PlayerScreen() {
 
             <View style={[styles.controlsContainer, { paddingBottom: insets.bottom + Spacing.xl }]}>
                 <TouchableOpacity onPress={toggleShuffle} style={styles.controlButton}>
-                    <Ionicons 
-                        name="shuffle" 
-                        size={26} 
-                        color={isShuffle ? currentColors.primary : currentColors.textSecondary} 
+                    <Ionicons
+                        name="shuffle"
+                        size={26}
+                        color={isShuffle ? currentColors.primary : currentColors.textSecondary}
                     />
                 </TouchableOpacity>
 
@@ -135,8 +202,8 @@ export default function PlayerScreen() {
                     <Ionicons name="play-skip-back" size={36} color={currentColors.text} />
                 </TouchableOpacity>
 
-                <TouchableOpacity 
-                    onPress={togglePlay} 
+                <TouchableOpacity
+                    onPress={togglePlay}
                     style={[styles.playButton, { backgroundColor: currentColors.primary }]}
                 >
                     <Ionicons
@@ -152,17 +219,17 @@ export default function PlayerScreen() {
                 </TouchableOpacity>
 
                 <TouchableOpacity onPress={toggleRepeat} style={styles.controlButton}>
-                    <Ionicons 
-                        name={repeatMode === 'one' ? "repeat-outline" : "repeat"} 
-                        size={26} 
-                        color={repeatMode !== 'off' ? currentColors.primary : currentColors.textSecondary} 
+                    <Ionicons
+                        name={repeatMode === 'one' ? "repeat-outline" : "repeat"}
+                        size={26}
+                        color={repeatMode !== 'off' ? currentColors.primary : currentColors.textSecondary}
                     />
                     {repeatMode === 'one' && (
                         <Text style={{ position: 'absolute', top: 12, right: 6, fontSize: 9, fontWeight: 'bold', color: currentColors.primary }}>1</Text>
                     )}
                 </TouchableOpacity>
             </View>
-        </View>
+        </Animated.View>
     );
 }
 

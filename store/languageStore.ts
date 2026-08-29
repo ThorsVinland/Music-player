@@ -12,7 +12,7 @@ export const translations = {
     settings: 'Settings',
 
     // Home / Library
-    musicLibrary: 'Music Library',
+    musicLibrary: 'Vault',
     allSongs: 'All Songs',
     scan: 'Scan',
     scanning: 'Scanning for audio files...',
@@ -81,7 +81,7 @@ export const translations = {
     settings: 'الإعدادات',
 
     // Home / Library
-    musicLibrary: 'مكتبة الموسيقى',
+    musicLibrary: 'Vault',
     allSongs: 'جميع الأغاني',
     scan: 'مسح',
     scanning: 'جاري البحث عن ملفات صوتية...',
@@ -150,7 +150,7 @@ export const translations = {
     settings: 'Paramètres',
 
     // Home / Library
-    musicLibrary: 'Bibliothèque Musicale',
+    musicLibrary: 'Vault',
     allSongs: 'Toutes les chansons',
     scan: 'Scanner',
     scanning: 'Recherche de fichiers audio...',

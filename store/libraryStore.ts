@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as MediaLibrary from 'expo-media-library';
 import { usePlayerStore } from './playerStore';
+import { preScanArtwork } from '../components/utils/getEmbeddedArt';
 
 const CACHE_KEY = '@music_player_songs_cache_v3';
 
@@ -31,6 +32,9 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         // Even if the cache is empty, we respect it. Only scan if cache is completely missing.
         set({ songs: parsedSongs, loading: false, hasLoadedCache: true });
         usePlayerStore.getState().setPlaylist(parsedSongs);
+        
+        // Trigger background artwork scan
+        preScanArtwork(parsedSongs.map(s => s.uri));
         return;
       }
     } catch (e) {
@@ -81,6 +85,9 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
 
       set({ songs: sorted, loading: false, isScanning: false, hasLoadedCache: true });
       usePlayerStore.getState().setPlaylist(sorted);
+      
+      // Trigger background artwork scan
+      preScanArtwork(sorted.map(s => s.uri));
     } catch (error) {
       console.log('Error scanning library:', error);
       set({ isScanning: false, loading: false });

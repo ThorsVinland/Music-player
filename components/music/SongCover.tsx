@@ -1,6 +1,6 @@
 import React, { useState, useEffect, memo } from 'react';
 import { Image, ImageStyle, StyleProp } from 'react-native';
-import { getEmbeddedArt, getMemoryCachedArt } from '../utils/getEmbeddedArt';
+import { getEmbeddedArt, getMemoryCachedArt, cancelEmbeddedArt } from '../utils/getEmbeddedArt';
 
 interface SongCoverProps {
   uri: string | null | undefined;
@@ -21,6 +21,7 @@ export const SongCover = memo(function SongCover({
   useEffect(() => {
     let isMounted = true;
     let debounceTimer: NodeJS.Timeout;
+    let didFire = false;
     setImageError(false);
 
     if (!uri) {
@@ -28,15 +29,12 @@ export const SongCover = memo(function SongCover({
       return;
     }
 
-    // If it was already loaded instantly via useState initializer, do nothing more
     if (artworkUri && getMemoryCachedArt(uri) === artworkUri) {
       return;
     }
 
-    // Otherwise, delay extraction for 150ms.
-    // If the user scrolls past this row quickly, the component will unmount,
-    // the cleanup function will clear this timer, and no heavy work/async calls will happen!
     debounceTimer = setTimeout(() => {
+      didFire = true;
       getEmbeddedArt(uri)
         .then((art) => {
           if (isMounted) {
@@ -53,6 +51,9 @@ export const SongCover = memo(function SongCover({
     return () => {
       isMounted = false;
       clearTimeout(debounceTimer);
+      if (didFire && uri) {
+        cancelEmbeddedArt(uri);
+      }
     };
   }, [uri]);
 
