@@ -1,5 +1,6 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, PanResponder, Animated, Dimensions, PixelRatio } from 'react-native';
+import { View, Text, StyleSheet, Image, Dimensions, PixelRatio } from 'react-native';
+import { Gesture, GestureDetector, TouchableOpacity } from 'react-native-gesture-handler';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS } from 'react-native-reanimated';
 import { useTheme } from '@/store/themeStore';
 import { Colors, Spacing, BorderRadius } from '@/constants/theme';
 import { usePlayerStore } from '@/store/playerStore';
@@ -61,67 +62,69 @@ export default function PlayerScreen() {
         return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
     };
 
-    // --- Animation setup ---
-    const translateY = React.useRef(new Animated.Value(0)).current;
-    const isClosingRef = React.useRef(false);
-
-    const closeWithAnimation = React.useCallback((fromValue: number = 0) => {
-        if (isClosingRef.current) return;
-        isClosingRef.current = true;
-        Animated.timing(translateY, {
-            toValue: SCREEN_HEIGHT,
-            duration: 220,
-            useNativeDriver: true,
-        }).start(() => {
-            router.back();
-        });
-    }, [translateY, router]);
-
-    const springBack = React.useCallback(() => {
-        Animated.spring(translateY, {
-            toValue: 0,
-            useNativeDriver: true,
-            speed: 16,
-            bounciness: 6,
-        }).start();
-    }, [translateY]);
-
-    const panResponder = React.useRef(
-        PanResponder.create({
-            onMoveShouldSetPanResponderCapture: (_, gestureState) => {
-                return gestureState.dy > 15 && Math.abs(gestureState.dy) > Math.abs(gestureState.dx);
-            },
-            onPanResponderMove: (_, gestureState) => {
-                // Follow the finger 1:1, don't allow dragging upward past 0
-                const dy = Math.max(0, gestureState.dy);
-                translateY.setValue(dy);
-            },
-            onPanResponderRelease: (_, gestureState) => {
-                const dy = Math.max(0, gestureState.dy);
-                if (dy > DISMISS_THRESHOLD || gestureState.vy > 0.5) {
-                    closeWithAnimation();
-                } else {
-                    springBack();
-                }
-            },
-            onPanResponderTerminate: () => {
-                springBack();
-            },
-        })
-    ).current;
+    // --- Animation setup (Reanimated) ---
+    const translateY = useSharedValue(0);
+    const isClosing = useSharedValue(false);
 
     const handleClosePress = () => {
-        closeWithAnimation();
+        if (isClosing.value) return;
+        isClosing.value = true;
+        translateY.value = withTiming(SCREEN_HEIGHT, { duration: 220 }, (finished) => {
+            if (finished) {
+                runOnJS(router.back)();
+            }
+        });
     };
 
+    const panGesture = Gesture.Pan()
+        .activeOffsetY(10) // Require 10px downward movement to activate
+        .failOffsetX([-20, 20]) // Fail if mostly horizontal (allows Slider to work)
+        .onUpdate((event) => {
+            if (isClosing.value) return;
+            // Follow the finger 1:1, don't allow dragging upward past 0
+            const dy = Math.max(0, event.translationY);
+            translateY.value = dy;
+            
+            console.log('[DISMISS DEBUG] onUpdate:', {
+                rawDy: event.translationY,
+                clampedDy: dy,
+            });
+        })
+        .onEnd((event) => {
+            if (isClosing.value) return;
+            const dy = Math.max(0, event.translationY);
+            const vy = event.velocityY; // Note: Reanimated velocity is in px/sec, so 500 is roughly equivalent to PanResponder's 0.5
+            
+            console.log('[DISMISS DEBUG] onEnd:', {
+                rawDy: event.translationY,
+                clampedDy: dy,
+                threshold: DISMISS_THRESHOLD,
+                vy: vy,
+                willClose: dy > DISMISS_THRESHOLD || vy > 500,
+            });
+
+            if (dy > DISMISS_THRESHOLD || vy > 500) {
+                isClosing.value = true;
+                translateY.value = withTiming(SCREEN_HEIGHT, { duration: 150 }, (finished) => {
+                    if (finished) runOnJS(router.back)();
+                });
+            } else {
+                translateY.value = withSpring(0, {
+                    stiffness: 400,
+                    damping: 30,
+                });
+            }
+        });
+
+    const animatedStyle = useAnimatedStyle(() => {
+        return {
+            transform: [{ translateY: translateY.value }],
+        };
+    });
+
     return (
-        <Animated.View
-            style={[
-                styles.container,
-                { transform: [{ translateY }] },
-            ]}
-            {...panResponder.panHandlers}
-        >
+        <GestureDetector gesture={panGesture}>
+            <Animated.View style={[styles.container, animatedStyle]}>
             <StaticGradientBackground />
 
             <View style={[styles.header, { paddingTop: insets.top + Spacing.sm }]}>
@@ -229,7 +232,8 @@ export default function PlayerScreen() {
                     )}
                 </TouchableOpacity>
             </View>
-        </Animated.View>
+            </Animated.View>
+        </GestureDetector>
     );
 }
 

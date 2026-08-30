@@ -11,7 +11,7 @@ export default function RootLayout() {
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="player" options={{ headerShown: false, presentation: 'modal' }} />
+        <Stack.Screen name="player" options={{ headerShown: false, presentation: 'modal', gestureEnabled: false }} />
       </Stack>
     </GestureHandlerRootView>
   );

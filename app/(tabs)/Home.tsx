@@ -23,7 +23,7 @@ export default function Home() {
   const currentColors = isDark ? Colors.dark : Colors.light;
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
-  const { isScanning, scanLibrary } = useLibraryStore();
+  const { isScanning, scanLibrary, songs } = useLibraryStore();
   const { language, t, isRTL } = useTranslation();
 
   return (
@@ -43,7 +43,7 @@ export default function Home() {
                   { color: currentColors.textSecondary },
                 ]}
               >
-                {t.allSongs}
+                {t.allSongs} · {songs.length} {songs.length === 1 ? t.trackSingular : t.trackPlural}
               </Text>
             </View>
 

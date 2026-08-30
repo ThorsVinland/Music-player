@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,6 +8,9 @@ import {
   Share,
   Alert,
   FlatList,
+  Animated,
+  Dimensions,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import * as MediaLibrary from 'expo-media-library';
 import { useTheme } from '@/store/themeStore';
@@ -20,10 +23,11 @@ import { useTranslation } from '@/store/languageStore';
 interface Props {
   visible: boolean;
   song: MediaLibrary.Asset | null;
+  anchor?: { x: number; y: number; width: number; height: number } | null;
   onClose: () => void;
 }
 
-export default function SongActionsModal({ visible, song, onClose }: Props) {
+export default function SongActionsModal({ visible, song, anchor, onClose }: Props) {
   const { isDark } = useTheme();
   const currentColors = isDark ? Colors.dark : Colors.light;
   const deleteSongFromLibrary = useLibraryStore((state) => state.deleteSongFromLibrary);
@@ -32,6 +36,49 @@ export default function SongActionsModal({ visible, song, onClose }: Props) {
 
   const [infoVisible, setInfoVisible] = useState(false);
   const [playlistPickerVisible, setPlaylistPickerVisible] = useState(false);
+
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  const opacityAnim = useRef(new Animated.Value(0)).current;
+  const [menuLayout, setMenuLayout] = useState<{ width: number; height: number } | null>(null);
+
+  useEffect(() => {
+    if (visible && !infoVisible && !playlistPickerVisible) {
+      Animated.parallel([
+        Animated.timing(scaleAnim, {
+          toValue: 1,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 1,
+          duration: 150,
+          useNativeDriver: true,
+        })
+      ]).start();
+    } else {
+      scaleAnim.setValue(0.9);
+      opacityAnim.setValue(0);
+      setMenuLayout(null);
+    }
+  }, [visible, infoVisible, playlistPickerVisible, scaleAnim, opacityAnim]);
+
+  const handleClose = (callback?: () => void) => {
+    Animated.parallel([
+      Animated.timing(scaleAnim, {
+        toValue: 0.9,
+        duration: 120,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 0,
+        duration: 120,
+        useNativeDriver: true,
+      })
+    ]).start(() => {
+      onClose();
+      if (callback) callback();
+    });
+  };
 
   if (!song) return null;
 
@@ -42,128 +89,169 @@ export default function SongActionsModal({ visible, song, onClose }: Props) {
   };
 
   const handleShare = async () => {
-    onClose();
-    try {
-      await Share.share({
-        title: song.filename,
-        message: `Listening to ${song.filename}`,
-        url: song.uri,
-      });
-    } catch (error: any) {
-      console.log('Share error:', error.message);
-    }
+    handleClose(async () => {
+      try {
+        await Share.share({
+          title: song.filename,
+          message: `Listening to ${song.filename}`,
+          url: song.uri,
+        });
+      } catch (error: any) {
+        console.log('Share error:', error.message);
+      }
+    });
   };
 
   const handleDelete = () => {
-    onClose();
-    Alert.alert(
-      t.deleteConfirmTitle,
-      t.deleteConfirmMsg,
-      [
-        { text: t.cancel, style: 'cancel' },
-        {
-          text: t.delete,
-          style: 'destructive',
-          onPress: () => deleteSongFromLibrary(song.id),
-        },
-      ]
-    );
+    handleClose(() => {
+      Alert.alert(
+        t.deleteConfirmTitle,
+        t.deleteConfirmMsg,
+        [
+          { text: t.cancel, style: 'cancel' },
+          {
+            text: t.delete,
+            style: 'destructive',
+            onPress: () => deleteSongFromLibrary(song.id),
+          },
+        ]
+      );
+    });
   };
 
   const handleAddToPlaylist = (playlistId: string, playlistName: string) => {
     addSongToPlaylist(playlistId, song.id);
     setPlaylistPickerVisible(false);
-    onClose();
-    Alert.alert(t.addedToPlaylistTitle, `${t.addedToPlaylistMsg} "${playlistName}"`);
+    handleClose(() => {
+      Alert.alert(t.addedToPlaylistTitle, `${t.addedToPlaylistMsg} "${playlistName}"`);
+    });
   };
+
+  const handleOpenPlaylistPicker = () => {
+    Animated.parallel([
+      Animated.timing(scaleAnim, { toValue: 0.9, duration: 120, useNativeDriver: true }),
+      Animated.timing(opacityAnim, { toValue: 0, duration: 120, useNativeDriver: true })
+    ]).start(() => {
+      setPlaylistPickerVisible(true);
+    });
+  };
+
+  const handleOpenInfo = () => {
+    Animated.parallel([
+      Animated.timing(scaleAnim, { toValue: 0.9, duration: 120, useNativeDriver: true }),
+      Animated.timing(opacityAnim, { toValue: 0, duration: 120, useNativeDriver: true })
+    ]).start(() => {
+      setInfoVisible(true);
+    });
+  };
+
+  const MENU_WIDTH = 220;
+  let top = 0;
+  let left = 0;
+  const window = Dimensions.get('window');
+
+  if (anchor) {
+    left = anchor.x - MENU_WIDTH + anchor.width;
+    if (left < 10) left = 10;
+    if (left + MENU_WIDTH > window.width - 10) left = window.width - MENU_WIDTH - 10;
+    
+    top = anchor.y + anchor.height;
+    if (menuLayout) {
+      if (top + menuLayout.height > window.height - 40) {
+        top = anchor.y - menuLayout.height;
+      }
+      if (top < 40) top = 40;
+    } else {
+      if (top + 200 > window.height - 40) {
+        top = anchor.y - 200;
+      }
+    }
+  } else {
+    left = window.width / 2 - MENU_WIDTH / 2;
+    top = window.height / 2 - 100;
+  }
 
   return (
     <>
       <Modal
         visible={visible && !infoVisible && !playlistPickerVisible}
         transparent
-        animationType="fade"
-        onRequestClose={onClose}
+        animationType="none"
+        onRequestClose={() => handleClose()}
       >
-        <TouchableOpacity
-          style={styles.backdrop}
-          activeOpacity={1}
-          onPress={onClose}
+        <TouchableWithoutFeedback onPress={() => handleClose()}>
+          <View style={styles.dropdownBackdrop} />
+        </TouchableWithoutFeedback>
+
+        <Animated.View
+          onLayout={(e) => {
+            setMenuLayout({
+              width: e.nativeEvent.layout.width,
+              height: e.nativeEvent.layout.height,
+            });
+          }}
+          style={[
+            styles.dropdownMenu,
+            {
+              backgroundColor: isDark ? '#232b38' : '#ffffff',
+              borderColor: currentColors.border,
+              opacity: opacityAnim,
+              transform: [{ scale: scaleAnim }],
+              top,
+              left,
+              width: MENU_WIDTH,
+            },
+          ]}
         >
-          <View
-            style={[
-              styles.sheetContainer,
-              {
-                backgroundColor: isDark ? '#161f30' : '#ffffff',
-                borderColor: currentColors.border,
-              },
-            ]}
+          <TouchableOpacity
+            style={styles.dropdownItem}
+            onPress={handleOpenPlaylistPicker}
           >
-            <View style={styles.sheetHeader}>
-              <View
-                style={[
-                  styles.handleBar,
-                  { backgroundColor: currentColors.textSecondary },
-                ]}
-              />
-              <Text
-                style={[styles.songTitleHeader, { color: currentColors.text }]}
-                numberOfLines={1}
-              >
-                {song.filename}
-              </Text>
-            </View>
+            <Ionicons
+              name="list-circle-outline"
+              size={22}
+              color={currentColors.primary}
+            />
+            <Text style={[styles.dropdownItemText, { color: currentColors.text }]}>
+              {t.addToPlaylist}
+            </Text>
+          </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.actionItem}
-              onPress={() => setPlaylistPickerVisible(true)}
-            >
-              <Ionicons
-                name="list-circle-outline"
-                size={24}
-                color={currentColors.primary}
-              />
-              <Text style={[styles.actionText, { color: currentColors.text }]}>
-                {t.addToPlaylist}
-              </Text>
-            </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.dropdownItem}
+            onPress={handleOpenInfo}
+          >
+            <Ionicons
+              name="information-circle-outline"
+              size={22}
+              color={currentColors.primary}
+            />
+            <Text style={[styles.dropdownItemText, { color: currentColors.text }]}>
+              {t.songInfo}
+            </Text>
+          </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.actionItem}
-              onPress={() => setInfoVisible(true)}
-            >
-              <Ionicons
-                name="information-circle-outline"
-                size={24}
-                color={currentColors.primary}
-              />
-              <Text style={[styles.actionText, { color: currentColors.text }]}>
-                {t.songInfo}
-              </Text>
-            </TouchableOpacity>
+          <TouchableOpacity style={styles.dropdownItem} onPress={handleShare}>
+            <Ionicons
+              name="share-social-outline"
+              size={22}
+              color={currentColors.primary}
+            />
+            <Text style={[styles.dropdownItemText, { color: currentColors.text }]}>
+              {t.share}
+            </Text>
+          </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionItem} onPress={handleShare}>
-              <Ionicons
-                name="share-social-outline"
-                size={24}
-                color={currentColors.primary}
-              />
-              <Text style={[styles.actionText, { color: currentColors.text }]}>
-                {t.share}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.actionItem, styles.deleteItem]}
-              onPress={handleDelete}
-            >
-              <Ionicons name="trash-outline" size={24} color="#ef4444" />
-              <Text style={[styles.actionText, { color: '#ef4444' }]}>
-                {t.removeFromLibrary}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.dropdownItem}
+            onPress={handleDelete}
+          >
+            <Ionicons name="trash-outline" size={22} color="#ef4444" />
+            <Text style={[styles.dropdownItemText, { color: '#ef4444' }]}>
+              {t.removeFromLibrary}
+            </Text>
+          </TouchableOpacity>
+        </Animated.View>
       </Modal>
 
       {/* Playlist Picker Modal */}
@@ -300,59 +388,33 @@ export default function SongActionsModal({ visible, song, onClose }: Props) {
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    justifyContent: 'flex-end',
+  dropdownBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'transparent',
   },
-  backdropCenter: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-  },
-  sheetContainer: {
-    borderTopLeftRadius: BorderRadius.xl,
-    borderTopRightRadius: BorderRadius.xl,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.sm,
-    paddingBottom: Spacing.xxl,
+  dropdownMenu: {
+    position: 'absolute',
+    borderRadius: BorderRadius.lg,
     borderWidth: 1,
+    paddingVertical: Spacing.xs,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
   },
-  sheetHeader: {
-    alignItems: 'center',
-    marginBottom: Spacing.md,
-  },
-  handleBar: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    marginBottom: Spacing.md,
-    opacity: 0.4,
-  },
-  songTitleHeader: {
-    fontSize: 16,
-    fontWeight: '700',
-    textAlign: 'center',
-    paddingHorizontal: Spacing.md,
-  },
-  actionItem: {
+  dropdownItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: Spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(150,150,150,0.15)',
+    paddingVertical: Spacing.sm + 2,
+    paddingHorizontal: Spacing.md,
   },
-  deleteItem: {
-    borderBottomWidth: 0,
-  },
-  actionText: {
+  dropdownItemText: {
     fontSize: 15,
     fontWeight: '500',
-    marginHorizontal: Spacing.md,
+    marginHorizontal: Spacing.sm + 2,
   },
-  infoCard: {
+  backdropCenter: {
     width: '100%',
     borderRadius: BorderRadius.xl,
     padding: Spacing.lg,

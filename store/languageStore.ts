@@ -22,6 +22,11 @@ export const translations = {
     noMatchingSongs: 'No matching songs',
     noMatchingSubtitle: 'Try searching with a different keyword.',
     loadingLibrary: 'Loading your music library...',
+    scanProgressWithTotal: 'Scanning your device... {found} / {total}',
+    scanSummaryNew: '{added} new songs added',
+    scanSummaryNewAndRemoved: '{added} new songs added, {removed} removed',
+    scanSummaryRemovedOnly: '{removed} songs removed',
+    scanSummaryUpToDate: 'Library is up to date',
 
     // Playlists & Collections
     collections: 'Collections',
@@ -91,6 +96,11 @@ export const translations = {
     noMatchingSongs: 'لا توجد نتائج مطابقة',
     noMatchingSubtitle: 'جرب البحث بكلمات مختلفة.',
     loadingLibrary: 'جاري تحميل مكتبة الموسيقى...',
+    scanProgressWithTotal: 'جاري مسح جهازك... {found} / {total}',
+    scanSummaryNew: 'تمت إضافة {added} أغانٍ جديدة',
+    scanSummaryNewAndRemoved: 'تمت إضافة {added} أغانٍ، وحذف {removed}',
+    scanSummaryRemovedOnly: 'تم حذف {removed} أغانٍ',
+    scanSummaryUpToDate: 'المكتبة محدثة',
 
     // Playlists & Collections
     collections: 'المجموعات',
@@ -160,6 +170,11 @@ export const translations = {
     noMatchingSongs: 'Aucun résultat',
     noMatchingSubtitle: 'Essayez un autre mot-clé.',
     loadingLibrary: 'Chargement de la bibliothèque...',
+    scanProgressWithTotal: 'Analyse de votre appareil... {found} / {total}',
+    scanSummaryNew: '{added} nouvelles chansons ajoutées',
+    scanSummaryNewAndRemoved: '{added} nouvelles chansons, {removed} supprimées',
+    scanSummaryRemovedOnly: '{removed} chansons supprimées',
+    scanSummaryUpToDate: 'La bibliothèque est à jour',
 
     // Playlists & Collections
     collections: 'Collections',

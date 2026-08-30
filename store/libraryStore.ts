@@ -8,14 +8,27 @@ const CACHE_KEY = '@music_player_songs_cache_v3';
 
 export type Song = MediaLibrary.Asset & { formattedDuration?: string };
 
+export interface ScanProgress {
+  found: number;
+  total: number;
+}
+
+export interface ScanSummary {
+  added: number;
+  removed: number;
+}
+
 interface LibraryState {
   songs: Song[];
   loading: boolean;
   isScanning: boolean;
   hasLoadedCache: boolean;
+  scanProgress: ScanProgress | null;
+  scanSummary: ScanSummary | null;
   loadSongs: () => Promise<void>;
   scanLibrary: () => Promise<void>;
   deleteSongFromLibrary: (id: string) => Promise<void>;
+  clearScanSummary: () => void;
 }
 
 export const useLibraryStore = create<LibraryState>((set, get) => ({
@@ -23,6 +36,8 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   loading: true,
   isScanning: false,
   hasLoadedCache: false,
+  scanProgress: null,
+  scanSummary: null,
 
   loadSongs: async () => {
     try {
@@ -46,7 +61,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   },
 
   scanLibrary: async () => {
-    set({ isScanning: true });
+    set({ isScanning: true, scanProgress: null, scanSummary: null });
     try {
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
@@ -62,11 +77,13 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       while (hasNextPage) {
         const media = await MediaLibrary.getAssetsAsync({
           mediaType: 'audio',
-          first: 1000,
+          first: 500,
           after,
         });
 
         allSongs = [...allSongs, ...media.assets];
+        set({ scanProgress: { found: allSongs.length, total: media.totalCount } });
+        
         hasNextPage = media.hasNextPage;
         after = media.endCursor;
       }
@@ -80,19 +97,47 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         return { ...song, formattedDuration };
       });
 
+      // Calculate diffs
+      const oldSongs = get().songs;
+      const oldIds = new Set(oldSongs.map(s => s.id));
+      const newIds = new Set(sorted.map(s => s.id));
+      
+      let added = 0;
+      for (const id of newIds) {
+        if (!oldIds.has(id)) added++;
+      }
+      let removed = 0;
+      for (const id of oldIds) {
+        if (!newIds.has(id)) removed++;
+      }
+
       // Save to local storage cache
       await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(sorted));
 
-      set({ songs: sorted, loading: false, isScanning: false, hasLoadedCache: true });
+      set({ 
+        songs: sorted, 
+        loading: false, 
+        isScanning: false, 
+        hasLoadedCache: true,
+        scanProgress: null,
+        scanSummary: { added, removed }
+      });
       usePlayerStore.getState().setPlaylist(sorted);
       
       // Trigger background artwork scan
       preScanArtwork(sorted.map(s => s.uri));
+
+      // Auto-clear summary after 4 seconds
+      setTimeout(() => {
+        set({ scanSummary: null });
+      }, 4000);
     } catch (error) {
       console.log('Error scanning library:', error);
-      set({ isScanning: false, loading: false });
+      set({ isScanning: false, loading: false, scanProgress: null });
     }
   },
+
+  clearScanSummary: () => set({ scanSummary: null }),
 
   deleteSongFromLibrary: async (id: string) => {
     const { songs } = get();

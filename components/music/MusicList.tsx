@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Keyboard,
   Platform,
+  Modal,
 } from 'react-native';
 import * as MediaLibrary from 'expo-media-library';
 import { useTheme } from '@/store/themeStore';
@@ -34,7 +35,7 @@ interface SongRowItemProps {
   isRTL: boolean;
   audioFileLabel: string;
   onPlay: (song: any) => void;
-  onOpenActions: (song: any) => void;
+  onOpenActions: (song: any, anchorInfo?: { x: number; y: number; width: number; height: number }) => void;
   onToggleFavorite: (id: string) => void;
 }
 
@@ -50,6 +51,14 @@ const SongRowItem = memo(function SongRowItem({
   onOpenActions,
   onToggleFavorite,
 }: SongRowItemProps) {
+  const actionBtnRef = useRef<View>(null);
+
+  const handleActionPress = useCallback(() => {
+    actionBtnRef.current?.measureInWindow((x, y, width, height) => {
+      onOpenActions(item, { x, y, width, height });
+    });
+  }, [item, onOpenActions]);
+
   return (
     <TouchableOpacity
       style={[
@@ -60,7 +69,7 @@ const SongRowItem = memo(function SongRowItem({
         },
       ]}
       onPress={() => onPlay(item)}
-      onLongPress={() => onOpenActions(item)}
+      onLongPress={handleActionPress}
       activeOpacity={0.65}
     >
       {/* Artwork / Icon */}
@@ -129,7 +138,8 @@ const SongRowItem = memo(function SongRowItem({
 
       {/* 3-Dots Action Button */}
       <TouchableOpacity
-        onPress={() => onOpenActions(item)}
+        ref={actionBtnRef}
+        onPress={handleActionPress}
         style={styles.iconBtn}
         hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
       >
@@ -158,19 +168,46 @@ export default function MusicList({ searchQuery = '' }: Props) {
   const loading = useLibraryStore((state) => state.loading);
   const isScanning = useLibraryStore((state) => state.isScanning);
   const loadSongs = useLibraryStore((state) => state.loadSongs);
+  const scanProgress = useLibraryStore((state) => state.scanProgress);
+  const scanSummary = useLibraryStore((state) => state.scanSummary);
+  const clearScanSummary = useLibraryStore((state) => state.clearScanSummary);
 
   const { t, isRTL } = useTranslation();
 
   const [selectedSongForActions, setSelectedSongForActions] =
     useState<MediaLibrary.Asset | null>(null);
+  const [actionsAnchor, setActionsAnchor] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
   const [actionsModalVisible, setActionsModalVisible] = useState(false);
+
+  const getProgressText = () => {
+    if (!scanProgress) return t.scanning;
+    return (t as any).scanProgressWithTotal
+      .replace('{found}', scanProgress.found.toString())
+      .replace('{total}', scanProgress.total.toString());
+  };
+
+  const getSummaryText = () => {
+    if (!scanSummary) return '';
+    const { added, removed } = scanSummary;
+    if (added === 0 && removed === 0) return (t as any).scanSummaryUpToDate;
+    if (added > 0 && removed > 0) {
+      return (t as any).scanSummaryNewAndRemoved
+        .replace('{added}', added.toString())
+        .replace('{removed}', removed.toString());
+    }
+    if (added > 0) {
+      return (t as any).scanSummaryNew.replace('{added}', added.toString());
+    }
+    return (t as any).scanSummaryRemovedOnly.replace('{removed}', removed.toString());
+  };
 
   useEffect(() => {
     loadSongs();
   }, [loadSongs]);
 
-  const openSongActions = useCallback((song: MediaLibrary.Asset) => {
+  const openSongActions = useCallback((song: MediaLibrary.Asset, anchorInfo?: { x: number; y: number; width: number; height: number }) => {
     setSelectedSongForActions(song);
+    setActionsAnchor(anchorInfo || null);
     setActionsModalVisible(true);
   }, []);
 
@@ -264,21 +301,43 @@ export default function MusicList({ searchQuery = '' }: Props) {
 
   return (
     <View style={styles.container}>
-      {isScanning && (
-        <View
-          style={[
-            styles.scanningBanner,
-            { backgroundColor: currentColors.primaryMuted },
-          ]}
-        >
-          <ActivityIndicator size="small" color={currentColors.primary} />
-          <Text
-            style={[styles.scanningText, { color: currentColors.primary }]}
-          >
-            {t.scanning}
-          </Text>
+      <Modal
+        visible={isScanning || (!!scanSummary && !isScanning)}
+        transparent
+        animationType="fade"
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.scanCard, { backgroundColor: isDark ? '#161f30' : '#ffffff', borderColor: currentColors.border }]}>
+            {isScanning ? (
+              <>
+                <ActivityIndicator size="large" color={currentColors.primary} style={{ marginBottom: Spacing.md }} />
+                <Text style={[styles.scanCardTitle, { color: currentColors.text }]}>{t.scanning}</Text>
+                <Text style={[styles.scanCardSubtitle, { color: currentColors.textSecondary }]}>
+                  {getProgressText()}
+                </Text>
+                {scanProgress && scanProgress.total > 0 && (
+                   <View style={{ height: 6, backgroundColor: currentColors.borderSubtle, borderRadius: 3, marginTop: Spacing.lg, overflow: 'hidden', width: '100%' }}>
+                     <View style={{ height: '100%', backgroundColor: currentColors.primary, width: `${Math.min(100, (scanProgress.found / scanProgress.total) * 100)}%` }} />
+                   </View>
+                )}
+              </>
+            ) : (
+              <>
+                <Ionicons name="checkmark-circle" size={54} color={currentColors.primary} style={{ marginBottom: Spacing.md }} />
+                <Text style={[styles.scanCardSubtitle, { color: currentColors.textSecondary, marginBottom: Spacing.xl }]}>
+                  {getSummaryText()}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.scanCardButton, { backgroundColor: currentColors.primary }]}
+                  onPress={clearScanSummary}
+                >
+                  <Text style={styles.scanCardButtonText}>{t.close}</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
         </View>
-      )}
+      </Modal>
 
       <FlatList
         data={filteredSongs}
@@ -318,6 +377,7 @@ export default function MusicList({ searchQuery = '' }: Props) {
       <SongActionsModal
         visible={actionsModalVisible}
         song={selectedSongForActions}
+        anchor={actionsAnchor}
         onClose={() => setActionsModalVisible(false)}
       />
     </View>
@@ -359,6 +419,48 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     marginLeft: Spacing.sm,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.xl,
+  },
+  scanCard: {
+    width: '100%',
+    padding: Spacing.xl,
+    borderRadius: BorderRadius.xl,
+    alignItems: 'center',
+    borderWidth: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  scanCardTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: Spacing.xs,
+    textAlign: 'center',
+  },
+  scanCardSubtitle: {
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  scanCardButton: {
+    paddingVertical: Spacing.sm + 2,
+    paddingHorizontal: Spacing.xl,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    width: '100%',
+  },
+  scanCardButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
   },
   // Clean flat list row with subtle bottom border line
   songRow: {
