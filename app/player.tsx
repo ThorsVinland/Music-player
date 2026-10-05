@@ -1,327 +1,466 @@
-import { View, Text, StyleSheet, Image, Dimensions, PixelRatio } from 'react-native';
-import { Gesture, GestureDetector, TouchableOpacity } from 'react-native-gesture-handler';
-import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, runOnJS } from 'react-native-reanimated';
-import { useTheme } from '@/store/themeStore';
-import { Colors, Spacing, BorderRadius } from '@/constants/theme';
-import { usePlayerStore } from '@/store/playerStore';
-import { useGlobalAudio } from '@/hooks/useGlobalAudio';
-import { Ionicons } from '@expo/vector-icons';
-import Slider from '@react-native-community/slider';
+import React from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  StatusBar,
+  useWindowDimensions,
+  LayoutChangeEvent,
+} from 'react-native';
+import {
+  Gesture,
+  GestureDetector,
+  TouchableOpacity,
+} from 'react-native-gesture-handler';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  runOnJS,
+} from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+
+import { useTheme } from '@/store/themeStore';
+import { Colors } from '@/constants/theme';
+import { usePlayerStore } from '@/store/playerStore';
+import { useGlobalAudio } from '@/hooks/useGlobalAudio';
+import { useTranslation } from '@/store/languageStore';
 import StaticGradientBackground from '@/components/ui/StaticGradientBackground';
+import VinylPlayer from '@/components/music/VinylPlayer';
+import Tonearm from '@/components/music/Tonearm';
 
-const SCREEN_HEIGHT = Dimensions.get('window').height;
+// ───────────── أحجام النصوص ─────────────
+const TITLE_SIZE = 15;
+const SUBTITLE_SIZE = 11;
+const LABEL_SIZE = 8;
 
-// ~2cm threshold, density-aware
-// لا تضرب بـ PixelRatio.get() لأن dp مستقلة عن الكثافة أصلاً
-const BASE_DPI = 160;
-const CM_TO_INCH = 0.393701;
-const DISMISS_THRESHOLD = 1 * CM_TO_INCH * BASE_DPI; // ≈ 63 dp للـ 1cm
+// ───────────── إعدادات عامة ─────────────
+const DISMISS_THRESHOLD = 95;
+const SHOW_PROGRESS = true; // الشريط الرفيع للتقديم (غير موجود في الصورة، اجعله false لحذفه)
 
 export default function PlayerScreen() {
-    const { isDark } = useTheme();
-    const currentColors = isDark ? Colors.dark : Colors.light;
-    const {
-        currentSong,
-        isPlaying,
-        position,
-        duration,
-        playNext,
-        playPrevious,
-        currentUri,
-        isShuffle,
-        repeatMode,
-        toggleShuffle,
-        toggleRepeat,
-        favorites,
-        toggleFavorite,
-        currentIndex,
-        playlist
-    } = usePlayerStore();
-    const { togglePlay, handleSeek } = useGlobalAudio();
-    const router = useRouter();
-    const insets = useSafeAreaInsets();
+  const { isDark } = useTheme();
+  const c = isDark ? Colors.dark : Colors.light;
+  const INK = c.text;
+  const INK_SOFT = c.textSecondary;
+  const styles = React.useMemo(() => makeStyles(c), [isDark]);
+  const { width: W, height: H } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const { t } = useTranslation();
 
-    const currentSongItem = currentIndex >= 0 && currentIndex < playlist.length ? playlist[currentIndex] : null;
-    const isFav = currentSongItem ? favorites.includes(currentSongItem.id) : false;
+  const {
+    currentSong,
+    isPlaying,
+    position,
+    duration,
+    playNext,
+    playPrevious,
+    currentUri,
+    isShuffle,
+    repeatMode,
+    toggleShuffle,
+    toggleRepeat,
+    favorites,
+    toggleFavorite,
+    currentIndex,
+    playlist,
+  } = usePlayerStore();
+  const { togglePlay, handleSeek } = useGlobalAudio();
 
-    const [isSeeking, setIsSeeking] = React.useState(false);
-    const [seekValue, setSeekValue] = React.useState(0);
+  const currentSongItem =
+    currentIndex >= 0 && currentIndex < playlist.length ? playlist[currentIndex] : null;
+  const isFav = currentSongItem ? favorites.includes(currentSongItem.id) : false;
 
-    React.useEffect(() => {
-        if (!isSeeking) {
-            setSeekValue(position);
-        }
-    }, [position, isSeeking]);
+  // ───────────── الهندسة (القرص + الذراع) ─────────────
+  const D = W * 0.82; // قطر القرص
+  const discLeft = -W * 0.04; // يخرج قليلاً من الحافة اليسرى
+  const armTop = insets.top + 56 + H * 0.02; // مرجع موضع الذراع (ثابت)
+  const DISC_DROP = D * 0.12; // مقدار إنزال القرص عن الذراع (زِد الرقم لإنزاله أكثر)
+  const discTop = armTop + DISC_DROP;
+  const pivotSize = W * 0.12;
+  const armLength = D * 0.78;
+  const pivotX = discLeft + D * 0.87; // أعلى اليمين
+  const pivotY = armTop + D * 0.08;
 
-    const formatTime = (millis: number) => {
-        const totalSeconds = Math.floor(millis / 1000);
-        const minutes = Math.floor(totalSeconds / 60);
-        const seconds = totalSeconds % 60;
-        return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
-    };
+  // ───────────── التقديم ─────────────
+  const [isSeeking, setIsSeeking] = React.useState(false);
+  const [seekValue, setSeekValue] = React.useState(0);
+  const [barW, setBarW] = React.useState(0);
 
-    // --- Animation setup (Reanimated) ---
-    const translateY = useSharedValue(0);
-    const isClosing = useSharedValue(false);
+  React.useEffect(() => {
+    if (!isSeeking) setSeekValue(position);
+  }, [position, isSeeking]);
 
-    const handleClosePress = () => {
-        if (isClosing.value) return;
-        isClosing.value = true;
-        translateY.value = withTiming(SCREEN_HEIGHT, { duration: 220 }, (finished) => {
-            if (finished) {
-                runOnJS(router.back)();
-            }
-        });
-    };
+  const ratioFromX = (x: number) =>
+    barW > 0 ? Math.min(Math.max(x / barW, 0), 1) : 0;
+  const beginSeek = (x: number) => {
+    setIsSeeking(true);
+    setSeekValue(ratioFromX(x) * duration);
+  };
+  const updateSeek = (x: number) => setSeekValue(ratioFromX(x) * duration);
+  const endSeek = (x: number) => {
+    const v = ratioFromX(x) * duration;
+    setSeekValue(v);
+    setIsSeeking(false);
+    handleSeek(v);
+  };
 
-    const panGesture = Gesture.Pan()
-        .activeOffsetY(10) // Require 10px downward movement to activate
-        .failOffsetX([-20, 20]) // Fail if mostly horizontal (allows Slider to work)
-        .onUpdate((event) => {
-            if (isClosing.value) return;
-            // Follow the finger 1:1, don't allow dragging upward past 0
-            const dy = Math.max(0, event.translationY);
-            translateY.value = dy;
-
-            console.log('[DISMISS DEBUG] onUpdate:', {
-                rawDy: event.translationY,
-                clampedDy: dy,
-            });
-        })
-        .onEnd((event) => {
-            if (isClosing.value) return;
-            const dy = Math.max(0, event.translationY);
-            const vy = event.velocityY; // Note: Reanimated velocity is in px/sec, so 500 is roughly equivalent to PanResponder's 0.5
-
-            console.log('[DISMISS DEBUG] onEnd:', {
-                rawDy: event.translationY,
-                clampedDy: dy,
-                threshold: DISMISS_THRESHOLD,
-                vy: vy,
-                willClose: dy > DISMISS_THRESHOLD || vy > 500,
-            });
-
-            if (dy > DISMISS_THRESHOLD || vy > 500) {
-                isClosing.value = true;
-                translateY.value = withTiming(SCREEN_HEIGHT, { duration: 150 }, (finished) => {
-                    if (finished) runOnJS(router.back)();
-                });
-            } else {
-                translateY.value = withSpring(0, {
-                    stiffness: 400,
-                    damping: 30,
-                });
-            }
-        });
-
-    const animatedStyle = useAnimatedStyle(() => {
-        return {
-            transform: [{ translateY: translateY.value }],
-        };
+  const seekGesture = Gesture.Pan()
+    .minDistance(0)
+    .onBegin((e) => {
+      runOnJS(beginSeek)(e.x);
+    })
+    .onUpdate((e) => {
+      runOnJS(updateSeek)(e.x);
+    })
+    .onEnd((e) => {
+      runOnJS(endSeek)(e.x);
     });
 
-    return (
-        <GestureDetector gesture={panGesture}>
-            <Animated.View style={[styles.container, animatedStyle]}>
-                <StaticGradientBackground />
+  const progressPct = duration > 0 ? Math.min((seekValue / duration) * 100, 100) : 0;
 
-                <View style={[styles.header, { paddingTop: insets.top + Spacing.sm }]}>
-                    <TouchableOpacity onPress={handleClosePress} style={styles.iconButton}>
-                        <Ionicons name="chevron-down" size={32} color={currentColors.text} />
-                    </TouchableOpacity>
-                    <Text style={[styles.headerTitle, { color: currentColors.textSecondary }]}>Now Playing</Text>
-                    {currentSongItem ? (
-                        <TouchableOpacity
-                            onPress={() => toggleFavorite(currentSongItem.id)}
-                            style={styles.iconButton}
-                        >
-                            <Ionicons
-                                name={isFav ? "heart" : "heart-outline"}
-                                size={26}
-                                color={isFav ? currentColors.primary : currentColors.text}
-                            />
-                        </TouchableOpacity>
-                    ) : (
-                        <View style={{ width: 44 }} />
-                    )}
+  const formatTime = (millis: number) => {
+    const s = Math.floor(millis / 1000);
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${sec < 10 ? '0' : ''}${sec}`;
+  };
+
+  // ───────────── السحب للأسفل للإغلاق ─────────────
+  const translateY = useSharedValue(0);
+  const isClosing = useSharedValue(false);
+  const goBack = () => router.back();
+
+  const handleClose = () => {
+    if (isClosing.value) return;
+    isClosing.value = true;
+    translateY.value = withTiming(H, { duration: 200 }, (finished) => {
+      if (finished) runOnJS(goBack)();
+    });
+  };
+
+  const panGesture = Gesture.Pan()
+    .activeOffsetY(10)
+    .failOffsetX([-25, 25])
+    .onUpdate((e) => {
+      if (isClosing.value) return;
+      translateY.value = Math.max(0, e.translationY);
+    })
+    .onEnd((e) => {
+      if (isClosing.value) return;
+      const dy = Math.max(0, e.translationY);
+      if (dy > DISMISS_THRESHOLD || e.velocityY > 600) {
+        isClosing.value = true;
+        translateY.value = withTiming(H, { duration: 160 }, (finished) => {
+          if (finished) runOnJS(goBack)();
+        });
+      } else {
+        translateY.value = withSpring(0, { stiffness: 400, damping: 30 });
+      }
+    });
+
+  const animatedContainerStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+  }));
+
+  // ───────────── النصوص ─────────────
+  const title = (currentSong || 'Unknown Track').replace(/\.[^/.]+$/, '');
+
+  return (
+    <Animated.View style={[styles.container, animatedContainerStyle]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
+      <StaticGradientBackground />
+
+      {/* القرص */}
+      <View
+        pointerEvents="none"
+        style={{ position: 'absolute', left: discLeft, top: discTop, width: D, height: D }}
+      >
+        <VinylPlayer
+          size={D}
+          artworkSource={
+            currentUri?.endsWith('.mp3')
+              ? require('@/assets/images/music.png')
+              : { uri: currentUri || undefined }
+          }
+          isPlaying={isPlaying}
+          accentColor={c.primary}
+        />
+      </View>
+
+      {/* الذراع */}
+      <Tonearm
+        pivotX={pivotX}
+        pivotY={pivotY}
+        pivotSize={pivotSize}
+        armLength={armLength}
+        isPlaying={isPlaying}
+        accentColor={c.primary}
+        ringColor={c.border}
+        onPlayStateChange={(shouldPlay) => {
+          if (shouldPlay !== isPlaying) togglePlay();
+        }}
+      />
+
+      {/* الشريط العلوي (سحب للإغلاق) */}
+      <GestureDetector gesture={panGesture}>
+        <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
+          <TouchableOpacity
+            onPress={handleClose}
+            style={styles.iconBtn}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="chevron-down" size={26} color={INK} />
+          </TouchableOpacity>
+
+          {currentSongItem ? (
+            <TouchableOpacity
+              onPress={() => toggleFavorite(currentSongItem.id)}
+              style={styles.iconBtn}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons
+                name={isFav ? 'heart' : 'heart-outline'}
+                size={22}
+                color={INK}
+              />
+            </TouchableOpacity>
+          ) : (
+            <View style={{ width: 38 }} />
+          )}
+        </View>
+      </GestureDetector>
+
+      {/* الجزء السفلي: النص + التقدم + الأزرار */}
+      <View
+        style={[
+          styles.bottom,
+          { paddingHorizontal: W * 0.09, paddingBottom: Math.max(insets.bottom, 12) + 28 },
+        ]}
+      >
+        {/* العنوان + اسم الفنان (يسار) */}
+        <View style={styles.infoRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.title, { color: INK }]} numberOfLines={2}>
+              {title}
+            </Text>
+            <Text style={[styles.subtitle, { color: INK_SOFT }]} numberOfLines={1}>
+              {t.audioFile} • {t.musicPlayer}
+            </Text>
+          </View>
+
+          <View style={styles.miniIcons}>
+            <TouchableOpacity
+              onPress={toggleShuffle}
+              hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+            >
+              <Ionicons name="shuffle" size={16} color={INK} style={{ opacity: isShuffle ? 1 : 0.3 }} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={toggleRepeat}
+              hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+            >
+              <Ionicons
+                name={repeatMode === 'one' ? 'repeat-outline' : 'repeat'}
+                size={16}
+                color={INK}
+                style={{ opacity: repeatMode !== 'off' ? 1 : 0.3 }}
+              />
+              {repeatMode === 'one' && <Text style={styles.repeatBadge}>1</Text>}
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* شريط التقدم الرفيع */}
+        {SHOW_PROGRESS && (
+          <View style={{ marginTop: 14 }}>
+            <GestureDetector gesture={seekGesture}>
+              <View
+                style={styles.barHit}
+                onLayout={(e: LayoutChangeEvent) => setBarW(e.nativeEvent.layout.width)}
+              >
+                <View style={styles.barTrack}>
+                  <View style={[styles.barFill, { width: `${progressPct}%` }]} />
                 </View>
+              </View>
+            </GestureDetector>
+            <View style={styles.timeRow}>
+              <Text style={[styles.time, { color: INK_SOFT }]}>{formatTime(seekValue)}</Text>
+              <Text style={[styles.time, { color: INK_SOFT }]}>{formatTime(duration)}</Text>
+            </View>
+          </View>
+        )}
 
-                <View style={styles.artworkContainer}>
-                    <Image
-                        source={
-                            currentUri?.endsWith(".mp3")
-                                ? require("@/assets/images/music.png")
-                                : { uri: currentUri || undefined }
-                        }
-                        style={[styles.artwork, { borderColor: currentColors.glassBorder }]}
-                    />
-                </View>
-
-                <View style={styles.infoContainer}>
-                    <Text style={[styles.songTitle, { color: currentColors.text }]} numberOfLines={2}>
-                        {currentSong || "Unknown Track"}
-                    </Text>
-                    <Text style={[styles.artistName, { color: currentColors.primary }]} numberOfLines={1}>
-                        Unknown Artist
-                    </Text>
-                </View>
-
-                <View style={styles.progressContainer}>
-                    <Slider
-                        style={styles.slider}
-                        minimumValue={0}
-                        maximumValue={duration}
-                        value={seekValue}
-                        onValueChange={(val) => {
-                            if (!isSeeking) setIsSeeking(true);
-                            setSeekValue(val);
-                        }}
-                        onSlidingComplete={(val) => {
-                            setIsSeeking(false);
-                            handleSeek(val);
-                        }}
-                        minimumTrackTintColor={currentColors.primary}
-                        maximumTrackTintColor={currentColors.glassBorder}
-                        thumbTintColor={currentColors.primary}
-                    />
-                    <View style={styles.timeRow}>
-                        <Text style={[styles.timeText, { color: currentColors.textSecondary }]}>{formatTime(seekValue)}</Text>
-                        <Text style={[styles.timeText, { color: currentColors.textSecondary }]}>{formatTime(duration)}</Text>
-                    </View>
-                </View>
-
-                <View style={[styles.controlsContainer, { paddingBottom: insets.bottom + Spacing.xl }]}>
-                    <TouchableOpacity onPress={toggleShuffle} style={styles.controlButton}>
-                        <Ionicons
-                            name="shuffle"
-                            size={26}
-                            color={isShuffle ? currentColors.primary : currentColors.textSecondary}
-                        />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity onPress={playPrevious} style={styles.mainControlButton}>
-                        <Ionicons name="play-skip-back" size={36} color={currentColors.text} />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                        onPress={togglePlay}
-                        style={[styles.playButton, { backgroundColor: currentColors.primary }]}
-                    >
-                        <Ionicons
-                            name={isPlaying ? "pause" : "play"}
-                            size={42}
-                            color="#fff"
-                            style={{ marginLeft: isPlaying ? 0 : 4 }}
-                        />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity onPress={playNext} style={styles.mainControlButton}>
-                        <Ionicons name="play-skip-forward" size={36} color={currentColors.text} />
-                    </TouchableOpacity>
-
-                    <TouchableOpacity onPress={toggleRepeat} style={styles.controlButton}>
-                        <Ionicons
-                            name={repeatMode === 'one' ? "repeat-outline" : "repeat"}
-                            size={26}
-                            color={repeatMode !== 'off' ? currentColors.primary : currentColors.textSecondary}
-                        />
-                        {repeatMode === 'one' && (
-                            <Text style={{ position: 'absolute', top: 12, right: 6, fontSize: 9, fontWeight: 'bold', color: currentColors.primary }}>1</Text>
-                        )}
-                    </TouchableOpacity>
-                </View>
-            </Animated.View>
-        </GestureDetector>
-    );
+        {/* الأزرار البيضاوية */}
+        <View style={styles.controlsRow}>
+          <PillButton
+            onPress={togglePlay}
+            label={isPlaying ? 'PAUSE' : 'PLAY'}
+            labelText
+          />
+          <View style={styles.rightPills}>
+            <PillButton onPress={playPrevious} icon="play-skip-back" />
+            <PillButton onPress={playNext} icon="play-skip-forward" />
+          </View>
+        </View>
+      </View>
+    </Animated.View>
+  );
 }
 
-const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-    },
-    header: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: Spacing.md,
-    },
-    iconButton: {
-        padding: Spacing.sm,
-    },
-    headerTitle: {
-        fontSize: 14,
-        fontWeight: '600',
-        textTransform: 'uppercase',
-        letterSpacing: 1,
-    },
-    artworkContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        paddingHorizontal: Spacing.xl,
-    },
-    artwork: {
-        width: '100%',
-        aspectRatio: 1,
-        borderRadius: BorderRadius.xl,
-        borderWidth: 1,
-    },
-    infoContainer: {
-        paddingHorizontal: Spacing.xl,
-        alignItems: 'center',
-        marginBottom: Spacing.xl,
-    },
-    songTitle: {
-        fontSize: 28,
-        fontWeight: 'bold',
-        textAlign: 'center',
-        marginBottom: Spacing.sm,
-    },
-    artistName: {
-        fontSize: 18,
-        fontWeight: '500',
-    },
-    progressContainer: {
-        paddingHorizontal: Spacing.xl,
-        marginBottom: Spacing.xl,
-    },
-    slider: {
-        width: "100%",
-        height: 40,
-    },
-    timeRow: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        marginTop: -10,
-    },
-    timeText: {
-        fontSize: 12,
-        fontWeight: '500',
-    },
-    controlsContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingHorizontal: Spacing.xl,
-    },
-    controlButton: {
-        padding: Spacing.sm,
-    },
-    mainControlButton: {
-        padding: Spacing.sm,
-    },
-    playButton: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
-        justifyContent: 'center',
-        alignItems: 'center',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.3,
-        shadowRadius: 10,
-        elevation: 8,
-    },
+/** زر بيضاوي داكن مع تسمية صغيرة أسفله */
+function PillButton({
+  onPress,
+  icon,
+  label,
+  labelText,
+}: {
+  onPress: () => void;
+  icon?: keyof typeof Ionicons.glyphMap;
+  label?: string;
+  labelText?: boolean;
+}) {
+  const { isDark } = useTheme();
+  const c = isDark ? Colors.dark : Colors.light;
+  const INK_SOFT = c.textSecondary;
+  const styles = React.useMemo(() => makeStyles(c), [isDark]);
+  return (
+    <View style={{ alignItems: 'center' }}>
+      <TouchableOpacity
+        onPress={onPress}
+        activeOpacity={0.8}
+        style={styles.pill}
+        hitSlop={{ top: 12, bottom: 12, left: 10, right: 10 }}
+      >
+        <View style={styles.pillGloss} />
+      </TouchableOpacity>
+      {labelText ? (
+        <Text style={[styles.pillLabel, { color: INK_SOFT }]}>{label}</Text>
+      ) : (
+        <Ionicons name={icon!} size={11} color={INK_SOFT} style={{ marginTop: 6 }} />
+      )}
+    </View>
+  );
+}
+
+const makeStyles = (c: typeof Colors.light) =>
+  StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: c.background,
+  },
+  header: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+  },
+  iconBtn: {
+    padding: 6,
+  },
+  bottom: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+  },
+  title: {
+    fontSize: TITLE_SIZE,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  subtitle: {
+    fontSize: SUBTITLE_SIZE,
+    fontWeight: '500',
+    marginTop: 3,
+  },
+  miniIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingLeft: 12,
+    paddingBottom: 2,
+  },
+  repeatBadge: {
+    position: 'absolute',
+    top: -3,
+    right: -4,
+    fontSize: 8,
+    fontWeight: '800',
+    color: c.primary,
+  },
+  barHit: {
+    height: 22,
+    justifyContent: 'center',
+  },
+  barTrack: {
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: c.border,
+    overflow: 'hidden',
+  },
+  barFill: {
+    height: '100%',
+    backgroundColor: c.primary,
+    borderRadius: 2,
+  },
+  timeRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 2,
+  },
+  time: {
+    fontSize: 9,
+    fontWeight: '500',
+  },
+  controlsRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginTop: 22,
+  },
+  rightPills: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  pill: {
+    width: 58,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: c.primary,
+    overflow: 'hidden',
+    shadowColor: c.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  pillGloss: {
+    position: 'absolute',
+    top: 2,
+    left: 10,
+    right: 10,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+  },
+  pillLabel: {
+    marginTop: 6,
+    fontSize: LABEL_SIZE,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
 });

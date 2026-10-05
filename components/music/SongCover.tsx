@@ -20,7 +20,7 @@ export const SongCover = memo(function SongCover({
 
   useEffect(() => {
     let isMounted = true;
-    let debounceTimer: NodeJS.Timeout;
+    let debounceTimer: ReturnType<typeof setTimeout>;
     let didFire = false;
     setImageError(false);
 

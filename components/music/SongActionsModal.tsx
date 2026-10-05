@@ -415,6 +415,13 @@ const styles = StyleSheet.create({
     marginHorizontal: Spacing.sm + 2,
   },
   backdropCenter: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.xl,
+  },
+  infoCard: {
     width: '100%',
     borderRadius: BorderRadius.xl,
     padding: Spacing.lg,

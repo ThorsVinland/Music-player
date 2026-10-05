@@ -21,7 +21,7 @@ import { useTranslation } from '@/store/languageStore';
 import Home from '@/app/(tabs)/Home';
 import PlaylistsScreen from '@/app/(tabs)/Playlists';
 import Settings from '@/app/(tabs)/Settings';
-import ExpandablePlayerCard from '../player/ExpandablePlayerCard';
+import MiniPlayer from '../player/MiniPlayer';
 import Toast from '../ui/Toast';
 import { usePlayerStore } from '@/store/playerStore';
 
@@ -177,8 +177,8 @@ export default function MainPagerView() {
         </PagerView>
       )}
 
-      {/* Floating Solid Mini / Expandable Player Card */}
-      {currentSong && <ExpandablePlayerCard />}
+      {/* Floating Solid Mini Player Bar */}
+      {currentSong && <MiniPlayer />}
 
       {/* Localized Theme-Aware Exit Toast */}
       <Toast
