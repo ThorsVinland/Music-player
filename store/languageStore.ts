@@ -12,7 +12,7 @@ export const translations = {
     settings: 'Settings',
 
     // Home / Library
-    musicLibrary: 'Vault',
+    musicLibrary: 'VYBE',
     allSongs: 'All Songs',
     scan: 'Scan',
     scanning: 'Scanning for audio files...',
@@ -86,7 +86,7 @@ export const translations = {
     settings: 'الإعدادات',
 
     // Home / Library
-    musicLibrary: 'Vault',
+    musicLibrary: 'VYBE',
     allSongs: 'جميع الأغاني',
     scan: 'مسح',
     scanning: 'جاري البحث عن ملفات صوتية...',
@@ -160,7 +160,7 @@ export const translations = {
     settings: 'Paramètres',
 
     // Home / Library
-    musicLibrary: 'Vault',
+    musicLibrary: 'VYBE',
     allSongs: 'Toutes les chansons',
     scan: 'Scanner',
     scanning: 'Recherche de fichiers audio...',
