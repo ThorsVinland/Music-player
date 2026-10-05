@@ -84,7 +84,7 @@ export default function PlayerScreen() {
             // Follow the finger 1:1, don't allow dragging upward past 0
             const dy = Math.max(0, event.translationY);
             translateY.value = dy;
-            
+
             console.log('[DISMISS DEBUG] onUpdate:', {
                 rawDy: event.translationY,
                 clampedDy: dy,
@@ -94,7 +94,7 @@ export default function PlayerScreen() {
             if (isClosing.value) return;
             const dy = Math.max(0, event.translationY);
             const vy = event.velocityY; // Note: Reanimated velocity is in px/sec, so 500 is roughly equivalent to PanResponder's 0.5
-            
+
             console.log('[DISMISS DEBUG] onEnd:', {
                 rawDy: event.translationY,
                 clampedDy: dy,
@@ -125,113 +125,113 @@ export default function PlayerScreen() {
     return (
         <GestureDetector gesture={panGesture}>
             <Animated.View style={[styles.container, animatedStyle]}>
-            <StaticGradientBackground />
+                <StaticGradientBackground />
 
-            <View style={[styles.header, { paddingTop: insets.top + Spacing.sm }]}>
-                <TouchableOpacity onPress={handleClosePress} style={styles.iconButton}>
-                    <Ionicons name="chevron-down" size={32} color={currentColors.text} />
-                </TouchableOpacity>
-                <Text style={[styles.headerTitle, { color: currentColors.textSecondary }]}>Now Playing</Text>
-                {currentSongItem ? (
-                    <TouchableOpacity
-                        onPress={() => toggleFavorite(currentSongItem.id)}
-                        style={styles.iconButton}
-                    >
+                <View style={[styles.header, { paddingTop: insets.top + Spacing.sm }]}>
+                    <TouchableOpacity onPress={handleClosePress} style={styles.iconButton}>
+                        <Ionicons name="chevron-down" size={32} color={currentColors.text} />
+                    </TouchableOpacity>
+                    <Text style={[styles.headerTitle, { color: currentColors.textSecondary }]}>Now Playing</Text>
+                    {currentSongItem ? (
+                        <TouchableOpacity
+                            onPress={() => toggleFavorite(currentSongItem.id)}
+                            style={styles.iconButton}
+                        >
+                            <Ionicons
+                                name={isFav ? "heart" : "heart-outline"}
+                                size={26}
+                                color={isFav ? currentColors.primary : currentColors.text}
+                            />
+                        </TouchableOpacity>
+                    ) : (
+                        <View style={{ width: 44 }} />
+                    )}
+                </View>
+
+                <View style={styles.artworkContainer}>
+                    <Image
+                        source={
+                            currentUri?.endsWith(".mp3")
+                                ? require("@/assets/images/music.png")
+                                : { uri: currentUri || undefined }
+                        }
+                        style={[styles.artwork, { borderColor: currentColors.glassBorder }]}
+                    />
+                </View>
+
+                <View style={styles.infoContainer}>
+                    <Text style={[styles.songTitle, { color: currentColors.text }]} numberOfLines={2}>
+                        {currentSong || "Unknown Track"}
+                    </Text>
+                    <Text style={[styles.artistName, { color: currentColors.primary }]} numberOfLines={1}>
+                        Unknown Artist
+                    </Text>
+                </View>
+
+                <View style={styles.progressContainer}>
+                    <Slider
+                        style={styles.slider}
+                        minimumValue={0}
+                        maximumValue={duration}
+                        value={seekValue}
+                        onValueChange={(val) => {
+                            if (!isSeeking) setIsSeeking(true);
+                            setSeekValue(val);
+                        }}
+                        onSlidingComplete={(val) => {
+                            setIsSeeking(false);
+                            handleSeek(val);
+                        }}
+                        minimumTrackTintColor={currentColors.primary}
+                        maximumTrackTintColor={currentColors.glassBorder}
+                        thumbTintColor={currentColors.primary}
+                    />
+                    <View style={styles.timeRow}>
+                        <Text style={[styles.timeText, { color: currentColors.textSecondary }]}>{formatTime(seekValue)}</Text>
+                        <Text style={[styles.timeText, { color: currentColors.textSecondary }]}>{formatTime(duration)}</Text>
+                    </View>
+                </View>
+
+                <View style={[styles.controlsContainer, { paddingBottom: insets.bottom + Spacing.xl }]}>
+                    <TouchableOpacity onPress={toggleShuffle} style={styles.controlButton}>
                         <Ionicons
-                            name={isFav ? "heart" : "heart-outline"}
+                            name="shuffle"
                             size={26}
-                            color={isFav ? currentColors.primary : currentColors.text}
+                            color={isShuffle ? currentColors.primary : currentColors.textSecondary}
                         />
                     </TouchableOpacity>
-                ) : (
-                    <View style={{ width: 44 }} />
-                )}
-            </View>
 
-            <View style={styles.artworkContainer}>
-                <Image
-                    source={
-                        currentUri?.endsWith(".mp3")
-                            ? require("@/assets/images/music.png")
-                            : { uri: currentUri || undefined }
-                    }
-                    style={[styles.artwork, { borderColor: currentColors.glassBorder }]}
-                />
-            </View>
+                    <TouchableOpacity onPress={playPrevious} style={styles.mainControlButton}>
+                        <Ionicons name="play-skip-back" size={36} color={currentColors.text} />
+                    </TouchableOpacity>
 
-            <View style={styles.infoContainer}>
-                <Text style={[styles.songTitle, { color: currentColors.text }]} numberOfLines={2}>
-                    {currentSong || "Unknown Track"}
-                </Text>
-                <Text style={[styles.artistName, { color: currentColors.primary }]} numberOfLines={1}>
-                    Unknown Artist
-                </Text>
-            </View>
+                    <TouchableOpacity
+                        onPress={togglePlay}
+                        style={[styles.playButton, { backgroundColor: currentColors.primary }]}
+                    >
+                        <Ionicons
+                            name={isPlaying ? "pause" : "play"}
+                            size={42}
+                            color="#fff"
+                            style={{ marginLeft: isPlaying ? 0 : 4 }}
+                        />
+                    </TouchableOpacity>
 
-            <View style={styles.progressContainer}>
-                <Slider
-                    style={styles.slider}
-                    minimumValue={0}
-                    maximumValue={duration}
-                    value={seekValue}
-                    onValueChange={(val) => {
-                        if (!isSeeking) setIsSeeking(true);
-                        setSeekValue(val);
-                    }}
-                    onSlidingComplete={(val) => {
-                        setIsSeeking(false);
-                        handleSeek(val);
-                    }}
-                    minimumTrackTintColor={currentColors.primary}
-                    maximumTrackTintColor={currentColors.glassBorder}
-                    thumbTintColor={currentColors.primary}
-                />
-                <View style={styles.timeRow}>
-                    <Text style={[styles.timeText, { color: currentColors.textSecondary }]}>{formatTime(seekValue)}</Text>
-                    <Text style={[styles.timeText, { color: currentColors.textSecondary }]}>{formatTime(duration)}</Text>
+                    <TouchableOpacity onPress={playNext} style={styles.mainControlButton}>
+                        <Ionicons name="play-skip-forward" size={36} color={currentColors.text} />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity onPress={toggleRepeat} style={styles.controlButton}>
+                        <Ionicons
+                            name={repeatMode === 'one' ? "repeat-outline" : "repeat"}
+                            size={26}
+                            color={repeatMode !== 'off' ? currentColors.primary : currentColors.textSecondary}
+                        />
+                        {repeatMode === 'one' && (
+                            <Text style={{ position: 'absolute', top: 12, right: 6, fontSize: 9, fontWeight: 'bold', color: currentColors.primary }}>1</Text>
+                        )}
+                    </TouchableOpacity>
                 </View>
-            </View>
-
-            <View style={[styles.controlsContainer, { paddingBottom: insets.bottom + Spacing.xl }]}>
-                <TouchableOpacity onPress={toggleShuffle} style={styles.controlButton}>
-                    <Ionicons
-                        name="shuffle"
-                        size={26}
-                        color={isShuffle ? currentColors.primary : currentColors.textSecondary}
-                    />
-                </TouchableOpacity>
-
-                <TouchableOpacity onPress={playPrevious} style={styles.mainControlButton}>
-                    <Ionicons name="play-skip-back" size={36} color={currentColors.text} />
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    onPress={togglePlay}
-                    style={[styles.playButton, { backgroundColor: currentColors.primary }]}
-                >
-                    <Ionicons
-                        name={isPlaying ? "pause" : "play"}
-                        size={42}
-                        color="#fff"
-                        style={{ marginLeft: isPlaying ? 0 : 4 }}
-                    />
-                </TouchableOpacity>
-
-                <TouchableOpacity onPress={playNext} style={styles.mainControlButton}>
-                    <Ionicons name="play-skip-forward" size={36} color={currentColors.text} />
-                </TouchableOpacity>
-
-                <TouchableOpacity onPress={toggleRepeat} style={styles.controlButton}>
-                    <Ionicons
-                        name={repeatMode === 'one' ? "repeat-outline" : "repeat"}
-                        size={26}
-                        color={repeatMode !== 'off' ? currentColors.primary : currentColors.textSecondary}
-                    />
-                    {repeatMode === 'one' && (
-                        <Text style={{ position: 'absolute', top: 12, right: 6, fontSize: 9, fontWeight: 'bold', color: currentColors.primary }}>1</Text>
-                    )}
-                </TouchableOpacity>
-            </View>
             </Animated.View>
         </GestureDetector>
     );
